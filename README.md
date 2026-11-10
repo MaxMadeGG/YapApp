@@ -4,17 +4,21 @@ Serverless group chat. Electron window + Hyperswarm (DHT discovery + NAT hole pu
 Everyone who joins the same room name finds each other over the internet - no server, no port forwarding.
 
 ## Install
-Download from the [Releases](https://github.com/MaxMadeGG/YapApp/releases) page:
-- **Windows:** `YapApp-Setup-x.y.z.exe` - run the installer. SmartScreen may warn because it isn't code-signed: "More info" > "Run anyway".
-- **Linux:** `YapApp-x.y.z.AppImage` (`chmod +x` it, then run) or `YapApp-x.y.z.deb` (`sudo apt install ./YapApp-x.y.z.deb`).
+Newest build (rebuilt automatically on every push to main):
+- **Windows:** [YapApp-Setup.exe](https://github.com/MaxMadeGG/YapApp/releases/download/latest/YapApp-Setup.exe) - run the installer. SmartScreen may warn because it isn't code-signed: "More info" > "Run anyway".
+- **Linux:** [YapApp.AppImage](https://github.com/MaxMadeGG/YapApp/releases/download/latest/YapApp.AppImage) (`chmod +x` it, then run) or [YapApp.deb](https://github.com/MaxMadeGG/YapApp/releases/download/latest/YapApp.deb) (`sudo apt install ./YapApp.deb`).
+
+Older fixed versions are on the [Releases](https://github.com/MaxMadeGG/YapApp/releases) page.
 
 ## Run from source
 Double-click `start.bat` (first run installs dependencies), or `npm install && npm start`. Needs Node.js.
 
 ## Build installers
 - Locally on Windows: `npm run dist:win` -> `release/`.
-- Linux installers need Linux, so GitHub Actions builds them: bump `version` in package.json, commit, then
-  `git tag v0.1.1 && git push origin v0.1.1`. The workflow builds Windows + Linux installers and attaches them to a Release.
+- GitHub Actions (`.github/workflows/release.yml`) builds Windows + Linux on every push to `main`
+  (README-only changes skipped) and replaces the files on the rolling `latest` release.
+- For a permanent versioned release: bump `version` in package.json, commit, then
+  `git tag vX.Y.Z && git push origin vX.Y.Z`.
 
 ## How it works
 - `main.js` - joins the Hyperswarm topic `sha256("yapapp-room:" + room)`, full mesh between peers.
