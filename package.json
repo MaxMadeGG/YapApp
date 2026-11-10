@@ -1,15 +1,61 @@
 {
-  "name": "p2p-chat",
+  "name": "yapapp",
   "version": "0.1.0",
-  "description": "Serverless peer-to-peer group chat (Electron + Hyperswarm)",
+  "description": "YapApp - serverless peer-to-peer group chat",
   "main": "main.js",
   "scripts": {
-    "start": "electron ."
+    "start": "electron .",
+    "dist:win": "electron-builder --win",
+    "dist:linux": "electron-builder --linux",
+    "dist": "electron-builder --win --linux"
   },
   "devDependencies": {
-    "electron": "^45.2.3"
+    "electron": "^45.2.3",
+    "electron-builder": "^26.18.0"
   },
   "dependencies": {
     "hyperswarm": "^4.17.2"
+  },
+  "productName": "YapApp",
+  "author": {
+    "name": "MaxMadeGG",
+    "email": "222811397+MaxMadeGG@users.noreply.github.com"
+  },
+  "homepage": "https://github.com/MaxMadeGG/YapApp",
+  "license": "MIT",
+  "build": {
+    "appId": "com.maxmadegg.yapapp",
+    "productName": "YapApp",
+    "npmRebuild": false,
+    "files": [
+      "main.js",
+      "preload.js",
+      "index.html",
+      "package.json",
+      "!node_modules/**/prebuilds/{android,darwin,ios}*/**"
+    ],
+    "directories": {
+      "output": "release"
+    },
+    "win": {
+      "target": [
+        "nsis"
+      ]
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "artifactName": "YapApp-Setup-${version}.exe"
+    },
+    "linux": {
+      "target": [
+        "AppImage",
+        "deb"
+      ],
+      "category": "Network",
+      "artifactName": "YapApp-${version}.${ext}"
+    },
+    "publish": null
   }
 }

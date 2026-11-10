@@ -110,7 +110,7 @@ function handle (conn, msg) {
 async function join (name, room) {
   await leave()
   me = { name: String(name).slice(0, 40), room: String(room) }
-  const topic = crypto.createHash('sha256').update('p2p-chat-room:' + me.room).digest()
+  const topic = crypto.createHash('sha256').update('yapapp-room:' + me.room).digest()
   historyFile = path.join(app.getPath('userData'), `history-${topic.toString('hex').slice(0, 16)}.json`)
   loadHistory()
   toUI('history', history)
@@ -149,7 +149,7 @@ app.whenReady().then(() => {
     height: 640,
     minWidth: 480,
     minHeight: 400,
-    title: 'P2P Chat',
+    title: 'YapApp',
     backgroundColor: '#1e1f24',
     autoHideMenuBar: true,
     webPreferences: {
@@ -159,9 +159,9 @@ app.whenReady().then(() => {
     }
   })
   win.loadFile('index.html')
-  // Test hook: P2PCHAT_AUTOJOIN="name|room" joins without the UI.
-  if (process.env.P2PCHAT_AUTOJOIN) {
-    const [n, r] = process.env.P2PCHAT_AUTOJOIN.split('|')
+  // Test hook: YAPAPP_AUTOJOIN="name|room" joins without the UI.
+  if (process.env.YAPAPP_AUTOJOIN) {
+    const [n, r] = process.env.YAPAPP_AUTOJOIN.split('|')
     join(n, r)
   }
 })
