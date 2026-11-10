@@ -2,9 +2,11 @@ const { app, BrowserWindow, ipcMain } = require('electron')
 const path = require('path')
 const fs = require('fs')
 const crypto = require('crypto')
+const { StringDecoder } = require('string_decoder')
 const Hyperswarm = require('hyperswarm')
 
-const MAX_HISTORY = 500
+const SYNC_BATCH = 200       // messages per 'history' packet
+const MAX_LINE = 16_000_000  // max bytes of one protocol line
 const MAX_TEXT = 4000
 
 let win = null
@@ -52,7 +54,6 @@ function addMessages (msgs) {
   }
   if (added) {
     history.sort((a, b) => a.ts - b.ts)
-    if (history.length > MAX_HISTORY) history = history.slice(-MAX_HISTORY)
     saveHistory()
   }
   return added
@@ -65,14 +66,16 @@ function write (conn, obj) {
 function onConnection (conn) {
   peers.set(conn, null)
   sendPeers()
-  // Introduce ourselves and share recent history so everyone catches up.
+  // Introduce ourselves and tell the peer which messages we already have;
+  // it replies with every message we're missing (see 'ids' in handle()).
   write(conn, { type: 'hello', name: me.name })
-  write(conn, { type: 'history', msgs: history.slice(-200) })
+  write(conn, { type: 'ids', ids: history.map(m => m.id) })
 
+  const decoder = new StringDecoder('utf8') // keeps emoji intact across chunks
   let buf = ''
   conn.on('data', chunk => {
-    buf += chunk.toString()
-    if (buf.length > 2_000_000) { buf = ''; return }
+    buf += decoder.write(chunk)
+    if (buf.length > MAX_LINE) { buf = ''; return }
     let i
     while ((i = buf.indexOf('\n')) >= 0) {
       const line = buf.slice(0, i)
@@ -100,6 +103,13 @@ function handle (conn, msg) {
     peers.set(conn, name)
     sendPeers()
     toUI('system', `${name} joined`)
+  } else if (msg.type === 'ids' && Array.isArray(msg.ids)) {
+    // Send the peer everything it doesn't have, in batches.
+    const theirs = new Set(msg.ids)
+    const missing = history.filter(m => !theirs.has(m.id))
+    for (let i = 0; i < missing.length; i += SYNC_BATCH) {
+      write(conn, { type: 'history', msgs: missing.slice(i, i + SYNC_BATCH) })
+    }
   } else if (msg.type === 'history' && Array.isArray(msg.msgs)) {
     if (addMessages(msg.msgs)) toUI('history', history)
   } else if (msg.type === 'msg') {
@@ -122,6 +132,12 @@ async function join (name, room) {
 }
 
 async function leave () {
+  // Flush any pending history save before closing / switching rooms.
+  if (saveTimer && historyFile) {
+    clearTimeout(saveTimer)
+    saveTimer = null
+    try { fs.writeFileSync(historyFile, JSON.stringify(history)) } catch {}
+  }
   peers.clear()
   if (swarm) {
     const s = swarm

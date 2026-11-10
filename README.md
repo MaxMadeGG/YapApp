@@ -19,9 +19,10 @@ Double-click `start.bat` (first run installs dependencies), or `npm install && n
 ## How it works
 - `main.js` - joins the Hyperswarm topic `sha256("yapapp-room:" + room)`, full mesh between peers.
   Wire protocol: newline-delimited JSON: `hello {name}`, `history {msgs}`, `msg {msg}`.
-  On connect each peer sends its last 200 messages; receivers merge by message id, so
-  people who were offline catch up when anyone with the history is online.
-- History saved per room in `%APPDATA%\YapApp\history-<hash>.json` (last 500 msgs).
+  On connect each peer sends `ids` (every message id it has); the other side replies with all
+  messages it's missing in `history` batches of 200, so people who were offline get the full
+  backlog when anyone with it is online. Receivers merge by message id.
+- Full history saved per room in `%APPDATA%\YapApp\history-<hash>.json` (no cap).
 - `preload.js` - IPC bridge; `index.html` - UI.
 - Test hook: env `YAPAPP_AUTOJOIN="name|room"` joins without the UI.
 
