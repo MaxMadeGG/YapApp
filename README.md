@@ -8,6 +8,10 @@ Newest build (rebuilt automatically on every push to main):
 - **Windows:** [YapApp-Setup.exe](https://github.com/MaxMadeGG/YapApp/releases/download/latest/YapApp-Setup.exe) - run the installer. SmartScreen may warn because it isn't code-signed: "More info" > "Run anyway".
 - **Linux:** [YapApp.AppImage](https://github.com/MaxMadeGG/YapApp/releases/download/latest/YapApp.AppImage) (`chmod +x` it, then run) or [YapApp.deb](https://github.com/MaxMadeGG/YapApp/releases/download/latest/YapApp.deb) (`sudo apt install ./YapApp.deb`).
 
+Installed apps update themselves: on start (and every 4 hours) YapApp checks the `latest` release,
+downloads a newer build in the background and offers "Restart to update" (or installs on quit).
+Needs the repo to be public. Rolling builds are versioned `major.minor.<CI run number>`.
+
 Older fixed versions are on the [Releases](https://github.com/MaxMadeGG/YapApp/releases) page.
 
 ## Run from source

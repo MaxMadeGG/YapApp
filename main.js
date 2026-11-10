@@ -176,6 +176,23 @@ ipcMain.handle('settings:set', (e, changes) => {
 ipcMain.handle('join', (e, name, room) => join(name, room))
 ipcMain.handle('leave', () => leave())
 ipcMain.handle('send', (e, text) => send(text))
+ipcMain.handle('app:version', () => app.getVersion())
+
+// Self-update from the rolling "latest" GitHub release (feed URL is in
+// package.json build.publish). Only the installed app updates, not `npm start`.
+let updater = null
+function setupAutoUpdate () {
+  if (!app.isPackaged) return
+  try { updater = require('electron-updater').autoUpdater } catch { return }
+  updater.autoDownload = true
+  updater.autoInstallOnAppQuit = true
+  updater.on('update-downloaded', info => toUI('update-ready', info.version))
+  updater.on('error', err => console.log('update check failed:', err && err.message))
+  const check = () => updater.checkForUpdates().catch(() => {})
+  check()
+  setInterval(check, 4 * 3600 * 1000)
+}
+ipcMain.handle('update:install', () => { if (updater) updater.quitAndInstall() })
 
 app.whenReady().then(() => {
   win = new BrowserWindow({
@@ -198,6 +215,7 @@ app.whenReady().then(() => {
     const [n, r] = process.env.YAPAPP_AUTOJOIN.split('|')
     join(n, r)
   }
+  setupAutoUpdate()
 })
 
 app.on('window-all-closed', async () => {

@@ -52,6 +52,11 @@
   .sys { color: var(--muted); font-size: 12px; font-style: italic; padding: 6px 0; }
   .empty { color: var(--muted); text-align: center; margin-top: 30%; }
 
+  #updateBar { display: flex; align-items: center; gap: 12px; padding: 8px 16px;
+    background: #24365f; border-bottom: 1px solid var(--line); font-size: 13px; }
+  #updateBar span { flex: 1; }
+  #updateBar button { padding: 5px 12px; }
+  #version { color: var(--muted); font-size: 11px; text-align: center; margin-top: 4px; }
   #composer { display: flex; gap: 10px; padding: 12px 16px; border-top: 1px solid var(--line); }
   #composer textarea { resize: none; height: 42px; max-height: 140px; }
 </style>
@@ -77,8 +82,14 @@
     <h3>Online</h3>
     <ul id="peers"></ul>
     <button class="ghost" id="leaveBtn">Leave room</button>
+    <div id="version"></div>
   </aside>
   <main>
+    <div id="updateBar" class="hidden">
+      <span id="updateText"></span>
+      <button id="updateBtn">Restart to update</button>
+      <button class="ghost" id="updateLater">Later</button>
+    </div>
     <div id="messages"></div>
     <form id="composer">
       <textarea id="input" placeholder="Message… (Enter to send, Shift+Enter for new line)"></textarea>
@@ -228,6 +239,15 @@
   $('input').addEventListener('keydown', e => {
     if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendInput() }
   })
+
+  // Self-update: main process downloads in the background, we offer a restart.
+  chat.version().then(v => { $('version').textContent = 'YapApp v' + v })
+  chat.on('update-ready', v => {
+    $('updateText').textContent = `YapApp ${v} is ready. It also installs automatically when you close the app.`
+    $('updateBar').classList.remove('hidden')
+  })
+  $('updateBtn').addEventListener('click', () => chat.installUpdate())
+  $('updateLater').addEventListener('click', () => $('updateBar').classList.add('hidden'))
 
   // Startup: rejoin the remembered room, or ask again if the login expired.
   ;(async function startup () {

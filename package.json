@@ -14,6 +14,7 @@
     "electron-builder": "^26.18.0"
   },
   "dependencies": {
+    "electron-updater": "^6.8.11",
     "hyperswarm": "^4.17.2"
   },
   "productName": "YapApp",
@@ -56,6 +57,9 @@
       "category": "Network",
       "artifactName": "YapApp-${version}.${ext}"
     },
-    "publish": null
+    "publish": {
+      "provider": "generic",
+      "url": "https://github.com/MaxMadeGG/YapApp/releases/download/latest"
+    }
   }
 }
