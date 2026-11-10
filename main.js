@@ -1,294 +1,31 @@
+// Electron host: window, IPC to the UI, clipboard and self-update.
+// All chat logic lives in core.js (shared with the Android app).
 const { app, BrowserWindow, ipcMain, clipboard } = require('electron')
 const path = require('path')
 const fs = require('fs')
-const crypto = require('crypto')
-const { StringDecoder } = require('string_decoder')
-const Hyperswarm = require('hyperswarm')
-
-const SYNC_BATCH = 200       // messages per 'history' packet
-const MAX_LINE = 16_000_000  // max bytes of one protocol line
-const MAX_TEXT = 4000
+const { createCore } = require('./core.js')
 
 let win = null
-let swarm = null
-let me = null          // { name, room, authKey }
-let history = []       // [{ id, name, text, ts }]
-let seen = new Set()
-let historyFile = null
-const peers = new Map() // authenticated conn -> name (null until 'hello')
-const AUTH_TIMEOUT = 15000
-
-// ---- Rooms & invites -------------------------------------------------------
-// A room is a random 128-bit secret. The invite code carries the secret plus the
-// room's display name: yap1-<secret base64url>-<name base64url>.
-// From the secret we derive (HKDF) the swarm topic and a separate auth key, so
-// the room can't be found or joined without the invite.
-function makeInvite (roomName) {
-  const name = String(roomName).trim().slice(0, 40) || 'Room'
-  const secret = crypto.randomBytes(16)
-  return `yap1-${secret.toString('base64url')}-${Buffer.from(name).toString('base64url')}`
-}
-
-function parseInvite (code) {
-  const m = /^yap1-([A-Za-z0-9_-]{22})-([A-Za-z0-9_-]{1,80})$/.exec(String(code).trim())
-  if (!m) return null
-  const secret = Buffer.from(m[1], 'base64url')
-  const name = Buffer.from(m[2], 'base64url').toString('utf8').slice(0, 40)
-  if (secret.length !== 16 || !name) return null
-  const derive = info => Buffer.from(crypto.hkdfSync('sha256', secret, 'yapapp', info, 32))
-  return { name, secret, topic: derive('topic'), authKey: derive('auth') }
-}
-
-// ---- Room name (synced, last rename wins) ----------------------------------
-// The invite carries the name the room had when the code was made. Renames are
-// shared as { name, ts, by } and the newest one wins; the secret never changes,
-// so old invite codes keep working.
-let roomMeta = null // { name, ts, by }
-let metaFile = null
-
-function currentInvite () {
-  return `yap1-${me.secret.toString('base64url')}-${Buffer.from(roomMeta.name).toString('base64url')}`
-}
-
-function roomInfo () { return { room: roomMeta.name, invite: currentInvite() } }
-
-function cleanRoomName (n) { return String(n).replace(/\s+/g, ' ').trim().slice(0, 40) }
-
-function validMeta (m) {
-  return m && typeof m.name === 'string' && cleanRoomName(m.name) &&
-    typeof m.ts === 'number' && Number.isFinite(m.ts) && typeof m.by === 'string'
-}
-
-// Returns true if `m` replaced the current name.
-function applyMeta (m) {
-  if (!validMeta(m)) return false
-  const name = cleanRoomName(m.name)
-  const newer = m.ts > roomMeta.ts || (m.ts === roomMeta.ts && name > roomMeta.name)
-  if (!newer || m.ts > Date.now() + 24 * 3600 * 1000) return false // ignore far-future clocks
-  roomMeta = { name, ts: m.ts, by: m.by.slice(0, 40) }
-  try { fs.writeFileSync(metaFile, JSON.stringify(roomMeta)) } catch {}
-  toUI('room', roomInfo())
-  return true
-}
-
-function renameRoom (newName) {
-  const name = cleanRoomName(newName)
-  if (!me || !name) return null
-  if (name !== roomMeta.name) {
-    applyMeta({ name, ts: Math.max(Date.now(), roomMeta.ts + 1), by: me.name })
-    for (const conn of peers.keys()) write(conn, { type: 'meta', meta: roomMeta })
-  }
-  return roomInfo()
-}
-
-// Proof that we hold the room secret, bound to this exact encrypted connection
-// (Noise handshake hash) and our role, so it can't be replayed or reflected.
-function authMac (conn, initiator) {
-  return crypto.createHmac('sha256', me.authKey)
-    .update(initiator ? 'yapapp-auth-I' : 'yapapp-auth-R')
-    .update(conn.handshakeHash)
-    .digest()
-}
 
 function toUI (channel, data) {
   if (win && !win.isDestroyed()) win.webContents.send(channel, data)
 }
 
-function sendPeers () {
-  toUI('peers', [...peers.values()].map(n => n || '(connecting…)'))
+let core = null
+function getCore () {
+  if (!core) core = createCore({ fs, dataDir: app.getPath('userData'), emit: toUI })
+  return core
 }
 
-function loadHistory () {
-  try { history = JSON.parse(fs.readFileSync(historyFile, 'utf8')) } catch { history = [] }
-  seen = new Set(history.map(m => m.id))
-}
-
-let saveTimer = null
-function saveHistory () {
-  clearTimeout(saveTimer)
-  saveTimer = setTimeout(() => {
-    try { fs.writeFileSync(historyFile, JSON.stringify(history)) } catch {}
-  }, 300)
-}
-
-function validMsg (m) {
-  return m && typeof m.id === 'string' && typeof m.name === 'string' &&
-    typeof m.text === 'string' && typeof m.ts === 'number' && m.text.length <= MAX_TEXT
-}
-
-// Add messages we haven't seen; returns true if anything new arrived.
-function addMessages (msgs) {
-  let added = false
-  for (const m of msgs) {
-    if (!validMsg(m) || seen.has(m.id)) continue
-    seen.add(m.id)
-    history.push({ id: m.id, name: m.name.slice(0, 40), text: m.text, ts: m.ts })
-    added = true
-  }
-  if (added) {
-    history.sort((a, b) => a.ts - b.ts)
-    saveHistory()
-  }
-  return added
-}
-
-function write (conn, obj) {
-  try { conn.write(JSON.stringify(obj) + '\n') } catch {}
-}
-
-async function onConnection (conn) {
-  // Until the peer proves it has the room secret we accept nothing but 'auth'
-  // and send nothing but our own proof. Failing or stalling = disconnect.
-  let authed = false
-  const timer = setTimeout(() => { if (!authed) conn.destroy() }, AUTH_TIMEOUT)
-  const onAuth = msg => {
-    let ok = false
-    try {
-      const theirs = Buffer.from(String(msg.mac), 'hex')
-      const expected = authMac(conn, !conn.isInitiator)
-      ok = theirs.length === expected.length && crypto.timingSafeEqual(theirs, expected)
-    } catch {}
-    if (!ok) { conn.destroy(); return }
-    authed = true
-    clearTimeout(timer)
-    peers.set(conn, null)
-    sendPeers()
-    // Introduce ourselves and tell the peer which messages we already have;
-    // it replies with every message we're missing (see 'ids' in handle()).
-    write(conn, { type: 'hello', name: me.name })
-    write(conn, { type: 'ids', ids: history.map(m => m.id) })
-    write(conn, { type: 'meta', meta: roomMeta })
-  }
-
-  const decoder = new StringDecoder('utf8') // keeps emoji intact across chunks
-  let buf = ''
-  conn.on('data', chunk => {
-    buf += decoder.write(chunk)
-    if (buf.length > MAX_LINE) { buf = ''; return }
-    let i
-    while ((i = buf.indexOf('\n')) >= 0) {
-      const line = buf.slice(0, i)
-      buf = buf.slice(i + 1)
-      let msg
-      try { msg = JSON.parse(line) } catch { conn.destroy(); return }
-      if (authed) handle(conn, msg)
-      else if (msg && msg.type === 'auth') onAuth(msg)
-      else { conn.destroy(); return }
-    }
-  })
-  const gone = () => {
-    clearTimeout(timer)
-    if (!peers.has(conn)) return
-    const name = peers.get(conn)
-    peers.delete(conn)
-    sendPeers()
-    if (name) toUI('system', `${name} left`)
-  }
-  conn.on('close', gone)
-  conn.on('error', gone)
-
-  if ((await conn.opened) === false || !me) return conn.destroy()
-  write(conn, { type: 'auth', mac: authMac(conn, conn.isInitiator).toString('hex') })
-}
-
-function handle (conn, msg) {
-  if (!msg || typeof msg !== 'object') return
-  if (msg.type === 'hello' && typeof msg.name === 'string') {
-    const name = msg.name.slice(0, 40)
-    peers.set(conn, name)
-    sendPeers()
-    toUI('system', `${name} joined`)
-  } else if (msg.type === 'ids' && Array.isArray(msg.ids)) {
-    // Send the peer everything it doesn't have, in batches.
-    const theirs = new Set(msg.ids)
-    const missing = history.filter(m => !theirs.has(m.id))
-    for (let i = 0; i < missing.length; i += SYNC_BATCH) {
-      write(conn, { type: 'history', msgs: missing.slice(i, i + SYNC_BATCH) })
-    }
-  } else if (msg.type === 'history' && Array.isArray(msg.msgs)) {
-    if (addMessages(msg.msgs)) toUI('history', history)
-  } else if (msg.type === 'msg') {
-    if (addMessages([msg.msg])) toUI('message', msg.msg)
-  } else if (msg.type === 'meta') {
-    if (applyMeta(msg.meta)) toUI('system', `${roomMeta.by} renamed the room to "${roomMeta.name}"`)
-  }
-}
-
-async function join (name, invite) {
-  const room = parseInvite(invite)
-  if (!room) return { ok: false, error: 'That invite code is not valid.' }
-  await leave()
-  me = { name: String(name).slice(0, 40), secret: room.secret, authKey: room.authKey }
-  const topic = room.topic
-  const roomId = topic.toString('hex').slice(0, 16)
-  historyFile = path.join(app.getPath('userData'), `history-${roomId}.json`)
-  metaFile = path.join(app.getPath('userData'), `room-${roomId}.json`)
-  roomMeta = { name: room.name, ts: 0, by: '' } // name from the invite, older than any rename
-  try {
-    const saved = JSON.parse(fs.readFileSync(metaFile, 'utf8'))
-    if (validMeta(saved)) roomMeta = { name: cleanRoomName(saved.name), ts: saved.ts, by: saved.by }
-  } catch {}
-  loadHistory()
-  toUI('history', history)
-
-  swarm = new Hyperswarm()
-  swarm.on('connection', onConnection)
-  swarm.join(topic, { server: true, client: true })
-  return { ok: true, ...roomInfo() }
-}
-
-async function leave () {
-  // Flush any pending history save before closing / switching rooms.
-  if (saveTimer && historyFile) {
-    clearTimeout(saveTimer)
-    saveTimer = null
-    try { fs.writeFileSync(historyFile, JSON.stringify(history)) } catch {}
-  }
-  peers.clear()
-  if (swarm) {
-    const s = swarm
-    swarm = null
-    try { await s.destroy() } catch {}
-  }
-}
-
-function send (text) {
-  text = String(text).slice(0, MAX_TEXT)
-  if (!me || !text.trim()) return null
-  const m = { id: crypto.randomUUID(), name: me.name, text, ts: Date.now() }
-  addMessages([m])
-  for (const conn of peers.keys()) write(conn, { type: 'msg', msg: m })
-  return m
-}
-
-// Remembered login (name, room, lastUsed) lives in a JSON file; Chromium's
-// localStorage is not reliably flushed to disk when the app quits.
-const SETTINGS_KEYS = ['name', 'invite', 'lastUsed']
-const settingsPath = () => path.join(app.getPath('userData'), 'settings.json')
-function readSettings () {
-  try { return JSON.parse(fs.readFileSync(settingsPath(), 'utf8')) || {} } catch { return {} }
-}
-ipcMain.handle('settings:get', () => readSettings())
-ipcMain.handle('settings:set', (e, changes) => {
-  const s = readSettings()
-  for (const k of SETTINGS_KEYS) {
-    if (!(k in changes)) continue
-    if (changes[k] === null) delete s[k]
-    else s[k] = String(changes[k]).slice(0, 300)
-  }
-  try { fs.writeFileSync(settingsPath(), JSON.stringify(s)) } catch {}
-})
-
-ipcMain.handle('join', (e, name, invite) => join(name, invite))
+ipcMain.handle('settings:get', () => getCore().getSettings())
+ipcMain.handle('settings:set', (e, changes) => getCore().setSettings(changes))
+ipcMain.handle('join', (e, name, invite) => getCore().join(name, invite))
+ipcMain.handle('leave', () => getCore().leave())
+ipcMain.handle('send', (e, text) => getCore().send(text))
+ipcMain.handle('room:rename', (e, name) => getCore().renameRoom(name))
+ipcMain.handle('invite:create', (e, roomName) => getCore().createInvite(roomName))
+ipcMain.handle('invite:check', (e, code) => getCore().checkInvite(code))
 ipcMain.handle('clipboard:write', (e, text) => clipboard.writeText(String(text)))
-ipcMain.handle('invite:create', (e, roomName) => makeInvite(roomName))
-ipcMain.handle('room:rename', (e, name) => renameRoom(name))
-ipcMain.handle('invite:check', (e, code) => {
-  const r = parseInvite(code)
-  return r ? r.name : null
-})
-ipcMain.handle('leave', () => leave())
-ipcMain.handle('send', (e, text) => send(text))
 ipcMain.handle('app:version', () => app.getVersion())
 
 // Self-update from the rolling "latest" GitHub release (feed URL is in
@@ -323,15 +60,15 @@ app.whenReady().then(() => {
     }
   })
   win.loadFile('index.html')
-  // Test hook: YAPAPP_AUTOJOIN="name|room" joins without the UI.
+  // Test hook: YAPAPP_AUTOJOIN="name|invite" joins without the UI.
   if (process.env.YAPAPP_AUTOJOIN) {
     const [n, invite] = process.env.YAPAPP_AUTOJOIN.split('|')
-    join(n, invite)
+    getCore().join(n, invite)
   }
   setupAutoUpdate()
 })
 
 app.on('window-all-closed', async () => {
-  await leave()
+  if (core) await core.leave()
   app.quit()
 })

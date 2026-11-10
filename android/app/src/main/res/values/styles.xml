@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+  <style name="YapTheme" parent="@android:style/Theme.DeviceDefault.NoActionBar">
+    <item name="android:windowBackground">@color/bg</item>
+    <item name="android:statusBarColor">@color/panel</item>
+    <item name="android:navigationBarColor">@color/panel</item>
+  </style>
+  <color name="bg">#1e1f24</color>
+  <color name="panel">#17181c</color>
+  <color name="accent">#5b8cff</color>
+</resources>

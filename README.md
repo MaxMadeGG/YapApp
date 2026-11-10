@@ -13,6 +13,9 @@ Installed apps update themselves: on start (and every 4 hours) YapApp checks the
 downloads a newer build in the background and offers "Restart to update" (or installs on quit).
 Needs the repo to be public. Rolling builds are versioned `major.minor.<CI run number>`.
 
+**Android:** build the APK yourself for now (see below) and install it on the phone
+(allow "Install unknown apps" for your file manager or browser). Phones and PCs join the same rooms.
+
 Older fixed versions are on the [Releases](https://github.com/MaxMadeGG/YapApp/releases) page.
 
 ## Run from source
@@ -25,8 +28,25 @@ Double-click `start.bat` (first run installs dependencies), or `npm install && n
 - For a permanent versioned release: bump `version` in package.json, commit, then
   `git tag vX.Y.Z && git push origin vX.Y.Z`.
 
+## Android app (`android/`)
+Native Android app: a WebView shows the same `index.html` (copied in by `npm run sync`, plus `bridge.js`),
+and the chat core runs in a [Bare Kit](https://github.com/holepunchto/bare-kit) worklet
+(`app/src/main/js/app.js` -> shared `core.js` + Hyperswarm). Java host: `MainActivity.java`.
+
+Build (needs Android Studio's SDK + JDK 17; no NDK needed):
+```
+cd android
+npm install
+npm run prepare          # fetch Bare Kit (~420 MB zip once), sync UI/core, link addons, bundle
+gradlew assembleDebug    # -> app/build/outputs/apk/debug/app-debug.apk
+```
+Test the worklet on the desktop with Bare: `npm run test:bare -- <invite> <dataDir>`.
+Bare Kit is pinned to v2.5.5 with bare-pack/bare-link ^1 (addons need `--needs libbare-kit.so`).
+Only `arm64-v8a` is packaged (see `abiFilters` in `app/build.gradle`).
+
 ## How it works
-- `main.js` - a room is a random 128-bit secret; the invite code is `yap1-<secret b64url>-<room name b64url>`.
+- `core.js` (shared by desktop and Android; crypto is HKDF/HMAC-SHA256 via sodium so both runtimes match)
+  - a room is a random 128-bit secret; the invite code is `yap1-<secret b64url>-<room name b64url>`.
   HKDF(secret) gives the Hyperswarm topic and a separate auth key. Full mesh between peers.
   Each connection must first send `auth` = HMAC(authKey, role || Noise handshake hash); anything else, a wrong
   MAC, or no MAC within 15 s disconnects the peer before any message is exchanged.

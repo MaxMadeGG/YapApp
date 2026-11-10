@@ -1,0 +1,24 @@
+{
+  "name": "yapapp-android-backend",
+  "private": true,
+  "description": "Bare (Bare Kit) backend for the YapApp Android app. Runs ../core.js.",
+  "scripts": {
+    "fetch-barekit": "node scripts/fetch-barekit.js",
+    "sync": "node scripts/sync.js",
+    "link": "bare-link --preset android --needs libbare-kit.so --out app/src/main/addons",
+    "pack": "bare-pack --preset android --out app/src/main/assets/app.bundle app/src/main/js/app.js",
+    "prepare": "npm run fetch-barekit && npm run sync && npm run link && npm run pack",
+    "test:bare": "bare test/bare-harness.js"
+  },
+  "dependencies": {
+    "b4a": "^1.9.0",
+    "bare-fs": "^4.8.4",
+    "hyperswarm": "^4.17.2",
+    "sodium-universal": "^5.0.1"
+  },
+  "devDependencies": {
+    "bare": "^1.37.0",
+    "bare-link": "^1.5.9",
+    "bare-pack": "^1.5.1"
+  }
+}

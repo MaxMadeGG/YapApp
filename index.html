@@ -2,6 +2,7 @@
 <html>
 <head>
 <meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
 <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline'">
 <title>YapApp</title>
 <style>
@@ -74,6 +75,24 @@
   #version { color: var(--muted); font-size: 11px; text-align: center; margin-top: 4px; }
   #composer { display: flex; gap: 10px; padding: 12px 16px; border-top: 1px solid var(--line); }
   #composer textarea { resize: none; height: 42px; max-height: 140px; }
+
+  /* Phones / narrow windows: sidebar becomes a compact header */
+  @media (max-width: 640px) {
+    #join { align-items: flex-start; padding: 16px; overflow-y: auto; }
+    #join form { width: 100%; padding: 20px; }
+    #chat { flex-direction: column; }
+    aside { width: auto; flex-direction: row; flex-wrap: wrap; align-items: center;
+      padding: 8px 12px; gap: 6px 8px; border-right: 0; border-bottom: 1px solid var(--line); }
+    aside .roomRow { flex: 1 1 100%; align-items: center; }
+    aside .me, aside h3, #version { display: none; }
+    #peers { flex: 1 1 auto; display: flex; gap: 12px; overflow-x: auto; white-space: nowrap; font-size: 12px; }
+    aside button.ghost { padding: 5px 10px; font-size: 12px; }
+    #messages { padding: 8px 12px; }
+    #composer { padding: 8px 10px; }
+    #updateBar, #inviteBar { padding: 8px 12px; }
+    #inviteBar .top { flex-wrap: wrap; }
+    #inviteBar .top span { flex: 1 1 100%; }
+  }
 </style>
 </head>
 <body>

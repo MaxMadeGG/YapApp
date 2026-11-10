@@ -1,0 +1,46 @@
+plugins {
+  id "com.android.application"
+}
+
+// Version comes from the desktop package.json so both apps match.
+def desktopPkg = new groovy.json.JsonSlurper().parse(file("../../package.json"))
+def appVersion = (System.getenv("YAPAPP_VERSION") ?: desktopPkg.version) as String
+def (vMajor, vMinor, vPatch) = appVersion.tokenize(".").collect { it.replaceAll("[^0-9]", "") as int }
+
+android {
+  namespace "com.maxmadegg.yapapp"
+  compileSdk 35
+
+  defaultConfig {
+    applicationId "com.maxmadegg.yapapp"
+    minSdk 29        // Bare Kit's minimum
+    targetSdk 35
+    versionName appVersion
+    versionCode vMajor * 1000000 + vMinor * 10000 + vPatch
+    ndk {
+      abiFilters "arm64-v8a" // practically every phone since ~2017; add "armeabi-v7a" for very old ones
+    }
+  }
+
+  sourceSets {
+    main {
+      // Bare Kit runtime + the linked native addons (udx-native, sodium-native, ...)
+      jniLibs.srcDirs "src/main/addons", "libs/bare-kit/jni"
+    }
+  }
+
+  compileOptions {
+    sourceCompatibility JavaVersion.VERSION_17
+    targetCompatibility JavaVersion.VERSION_17
+  }
+
+  packaging {
+    jniLibs {
+      useLegacyPackaging true
+    }
+  }
+}
+
+dependencies {
+  implementation files("libs/bare-kit/classes.jar")
+}

@@ -1,6 +1,6 @@
 {
   "name": "yapapp",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "YapApp - serverless peer-to-peer group chat",
   "main": "main.js",
   "scripts": {
@@ -14,8 +14,10 @@
     "electron-builder": "^26.18.0"
   },
   "dependencies": {
+    "b4a": "^1.9.0",
     "electron-updater": "^6.8.11",
-    "hyperswarm": "^4.17.2"
+    "hyperswarm": "^4.17.2",
+    "sodium-universal": "^5.0.1"
   },
   "productName": "YapApp",
   "author": {
@@ -33,7 +35,8 @@
       "preload.js",
       "index.html",
       "package.json",
-      "!node_modules/**/prebuilds/{android,darwin,ios}*/**"
+      "!node_modules/**/prebuilds/{android,darwin,ios}*/**",
+      "core.js"
     ],
     "directories": {
       "output": "release"
