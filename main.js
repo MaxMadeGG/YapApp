@@ -155,6 +155,24 @@ function send (text) {
   return m
 }
 
+// Remembered login (name, room, lastUsed) lives in a JSON file; Chromium's
+// localStorage is not reliably flushed to disk when the app quits.
+const SETTINGS_KEYS = ['name', 'room', 'lastUsed']
+const settingsPath = () => path.join(app.getPath('userData'), 'settings.json')
+function readSettings () {
+  try { return JSON.parse(fs.readFileSync(settingsPath(), 'utf8')) || {} } catch { return {} }
+}
+ipcMain.handle('settings:get', () => readSettings())
+ipcMain.handle('settings:set', (e, changes) => {
+  const s = readSettings()
+  for (const k of SETTINGS_KEYS) {
+    if (!(k in changes)) continue
+    if (changes[k] === null) delete s[k]
+    else s[k] = String(changes[k]).slice(0, 200)
+  }
+  try { fs.writeFileSync(settingsPath(), JSON.stringify(s)) } catch {}
+})
+
 ipcMain.handle('join', (e, name, room) => join(name, room))
 ipcMain.handle('leave', () => leave())
 ipcMain.handle('send', (e, text) => send(text))

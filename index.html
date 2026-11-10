@@ -92,10 +92,15 @@
   const messagesEl = $('messages')
   let lastName = null
 
-  function store (k, v) { try { localStorage.setItem(k, v) } catch {} }
-  function load (k) { try { return localStorage.getItem(k) || '' } catch { return '' } }
-  $('name').value = load('name')
-  $('room').value = load('room')
+  // Settings are kept by the main process in settings.json (see main.js).
+  let settings = {}
+  function store (k, v) { settings[k] = v; chat.setSettings({ [k]: v }) }
+  function load (k) { return settings[k] || '' }
+  function forget (k) { delete settings[k]; chat.setSettings({ [k]: null }) }
+
+  // Remembered login: auto-join on startup until it hasn't been used for SESSION_DAYS.
+  const SESSION_DAYS = 30
+  function touchSession () { store('lastUsed', String(Date.now())) }
 
   function colorFor (name) {
     let h = 0
@@ -182,12 +187,9 @@
     }
   })
 
-  $('joinForm').addEventListener('submit', async e => {
-    e.preventDefault()
-    const name = $('name').value.trim()
-    const room = $('room').value.trim()
-    if (!name || !room) return
+  async function enterRoom (name, room) {
     store('name', name); store('room', room)
+    touchSession()
     $('roomLabel').textContent = '# ' + room
     $('meLabel').textContent = 'you are ' + name
     $('join').classList.add('hidden')
@@ -195,10 +197,20 @@
     $('peers').innerHTML = '<li class="none">Looking for peers…</li>'
     await chat.join(name, room)
     $('input').focus()
+  }
+
+  $('joinForm').addEventListener('submit', e => {
+    e.preventDefault()
+    const name = $('name').value.trim()
+    const room = $('room').value.trim()
+    if (name && room) enterRoom(name, room)
   })
 
   $('leaveBtn').addEventListener('click', async () => {
     await chat.leave()
+    forget('lastUsed') // leaving = log out; name and room stay pre-filled
+    $('name').value = load('name')
+    $('room').value = load('room')
     $('chat').classList.add('hidden')
     $('join').classList.remove('hidden')
   })
@@ -209,13 +221,25 @@
     if (!text.trim()) return
     input.value = ''
     const m = await chat.send(text)
-    if (m) addMsg(m, true)
+    if (m) { addMsg(m, true); touchSession() }
   }
 
   $('composer').addEventListener('submit', e => { e.preventDefault(); sendInput() })
   $('input').addEventListener('keydown', e => {
     if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendInput() }
   })
+
+  // Startup: rejoin the remembered room, or ask again if the login expired.
+  ;(async function startup () {
+    settings = await chat.getSettings()
+    const name = load('name'), room = load('room')
+    const lastUsed = Number(load('lastUsed')) || 0
+    const fresh = Date.now() - lastUsed < SESSION_DAYS * 24 * 3600 * 1000
+    if (name && room && fresh) return enterRoom(name, room)
+    if (lastUsed && !fresh) { forget('name'); forget('room'); forget('lastUsed') }
+    $('name').value = load('name')
+    $('room').value = load('room')
+  })()
 </script>
 </body>
 </html>
