@@ -36,6 +36,9 @@ Double-click `start.bat` (first run installs dependencies), or `npm install && n
   backlog when anyone with it is online. Receivers merge by message id.
 - Full history saved per room in `%APPDATA%\YapApp\history-<hash>.json` (no cap).
 - `preload.js` - IPC bridge; `index.html` - UI.
+- Room name: click the pencil (or double-click the name) to rename. Renames sync as `meta {name, ts, by}`,
+  newest wins, sent on every connect so offline peers catch up; stored in `room-<hash>.json`. The secret
+  doesn't change, so old invite codes keep working; "Invite people" shows a code with the current name.
 - Remembered login (name, invite, lastUsed) in `%APPDATA%\YapApp\settings.json`: the app auto-joins on start
   until it has not been used for 30 days (`SESSION_DAYS` in index.html). "Leave room" logs out.
 - Test hook: env `YAPAPP_AUTOJOIN="name|room"` joins without the UI.

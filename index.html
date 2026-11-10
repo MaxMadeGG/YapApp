@@ -33,7 +33,11 @@
   #chat { height: 100%; display: flex; }
   aside { width: 210px; background: var(--panel); border-right: 1px solid var(--line);
     display: flex; flex-direction: column; padding: 16px; gap: 6px; }
-  aside .room { font-weight: 700; font-size: 16px; word-break: break-word; }
+  aside .roomRow { display: flex; align-items: flex-start; gap: 6px; }
+  aside .room { font-weight: 700; font-size: 16px; word-break: break-word; flex: 1; }
+  #renameBtn { background: none; border: 0; color: var(--muted); padding: 2px 4px; font-size: 14px; cursor: pointer; }
+  #renameBtn:hover { color: var(--text); }
+  #renameInput { font-weight: 700; font-size: 15px; padding: 4px 6px; }
   aside .me { color: var(--muted); font-size: 12px; margin-bottom: 14px; }
   aside h3 { font-size: 11px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); margin: 6px 0 4px; }
   #peers { list-style: none; margin: 0; padding: 0; flex: 1; overflow-y: auto; }
@@ -101,7 +105,11 @@
 
 <section id="chat" class="hidden">
   <aside>
-    <div class="room" id="roomLabel"></div>
+    <div class="roomRow">
+      <div class="room" id="roomLabel"></div>
+      <input id="renameInput" class="hidden" maxlength="40" autocomplete="off">
+      <button id="renameBtn" title="Rename room">✎</button>
+    </div>
     <div class="me" id="meLabel"></div>
     <h3>Online</h3>
     <ul id="peers"></ul>
@@ -233,15 +241,50 @@
 
   function showError (text) { $('joinError').textContent = text || '' }
 
+  // Room name + its current invite code (renames come from us or from peers).
+  function showRoom (info) {
+    $('roomLabel').textContent = '# ' + info.room
+    $('inviteCode').textContent = info.invite
+    store('invite', info.invite) // same secret, newest name
+  }
+  chat.on('room', showRoom)
+
+  function startRename () {
+    const input = $('renameInput')
+    input.value = $('roomLabel').textContent.replace(/^# /, '')
+    $('roomLabel').classList.add('hidden')
+    $('renameBtn').classList.add('hidden')
+    input.classList.remove('hidden')
+    input.focus(); input.select()
+  }
+  async function finishRename (save) {
+    const input = $('renameInput')
+    if (input.classList.contains('hidden')) return
+    input.classList.add('hidden')
+    $('roomLabel').classList.remove('hidden')
+    $('renameBtn').classList.remove('hidden')
+    const name = input.value.trim()
+    if (save && name) {
+      const info = await chat.renameRoom(name)
+      if (info) showRoom(info)
+    }
+  }
+  $('renameBtn').addEventListener('click', startRename)
+  $('roomLabel').addEventListener('dblclick', startRename)
+  $('renameInput').addEventListener('keydown', e => {
+    if (e.key === 'Enter') { e.preventDefault(); finishRename(true) }
+    if (e.key === 'Escape') { e.preventDefault(); finishRename(false) }
+  })
+  $('renameInput').addEventListener('blur', () => finishRename(true))
+
   async function enterRoom (name, invite, showInvite) {
     const res = await chat.join(name, invite)
     if (!res.ok) { showError(res.error); return false }
     showError('')
     store('name', name); store('invite', invite)
     touchSession()
-    $('roomLabel').textContent = '# ' + res.room
+    showRoom(res)
     $('meLabel').textContent = 'you are ' + name
-    $('inviteCode').textContent = invite
     $('inviteBar').classList.toggle('hidden', !showInvite)
     $('join').classList.add('hidden')
     $('chat').classList.remove('hidden')

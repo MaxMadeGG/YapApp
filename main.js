@@ -36,7 +36,49 @@ function parseInvite (code) {
   const name = Buffer.from(m[2], 'base64url').toString('utf8').slice(0, 40)
   if (secret.length !== 16 || !name) return null
   const derive = info => Buffer.from(crypto.hkdfSync('sha256', secret, 'yapapp', info, 32))
-  return { name, topic: derive('topic'), authKey: derive('auth') }
+  return { name, secret, topic: derive('topic'), authKey: derive('auth') }
+}
+
+// ---- Room name (synced, last rename wins) ----------------------------------
+// The invite carries the name the room had when the code was made. Renames are
+// shared as { name, ts, by } and the newest one wins; the secret never changes,
+// so old invite codes keep working.
+let roomMeta = null // { name, ts, by }
+let metaFile = null
+
+function currentInvite () {
+  return `yap1-${me.secret.toString('base64url')}-${Buffer.from(roomMeta.name).toString('base64url')}`
+}
+
+function roomInfo () { return { room: roomMeta.name, invite: currentInvite() } }
+
+function cleanRoomName (n) { return String(n).replace(/\s+/g, ' ').trim().slice(0, 40) }
+
+function validMeta (m) {
+  return m && typeof m.name === 'string' && cleanRoomName(m.name) &&
+    typeof m.ts === 'number' && Number.isFinite(m.ts) && typeof m.by === 'string'
+}
+
+// Returns true if `m` replaced the current name.
+function applyMeta (m) {
+  if (!validMeta(m)) return false
+  const name = cleanRoomName(m.name)
+  const newer = m.ts > roomMeta.ts || (m.ts === roomMeta.ts && name > roomMeta.name)
+  if (!newer || m.ts > Date.now() + 24 * 3600 * 1000) return false // ignore far-future clocks
+  roomMeta = { name, ts: m.ts, by: m.by.slice(0, 40) }
+  try { fs.writeFileSync(metaFile, JSON.stringify(roomMeta)) } catch {}
+  toUI('room', roomInfo())
+  return true
+}
+
+function renameRoom (newName) {
+  const name = cleanRoomName(newName)
+  if (!me || !name) return null
+  if (name !== roomMeta.name) {
+    applyMeta({ name, ts: Math.max(Date.now(), roomMeta.ts + 1), by: me.name })
+    for (const conn of peers.keys()) write(conn, { type: 'meta', meta: roomMeta })
+  }
+  return roomInfo()
 }
 
 // Proof that we hold the room secret, bound to this exact encrypted connection
@@ -115,6 +157,7 @@ async function onConnection (conn) {
     // it replies with every message we're missing (see 'ids' in handle()).
     write(conn, { type: 'hello', name: me.name })
     write(conn, { type: 'ids', ids: history.map(m => m.id) })
+    write(conn, { type: 'meta', meta: roomMeta })
   }
 
   const decoder = new StringDecoder('utf8') // keeps emoji intact across chunks
@@ -166,6 +209,8 @@ function handle (conn, msg) {
     if (addMessages(msg.msgs)) toUI('history', history)
   } else if (msg.type === 'msg') {
     if (addMessages([msg.msg])) toUI('message', msg.msg)
+  } else if (msg.type === 'meta') {
+    if (applyMeta(msg.meta)) toUI('system', `${roomMeta.by} renamed the room to "${roomMeta.name}"`)
   }
 }
 
@@ -173,16 +218,23 @@ async function join (name, invite) {
   const room = parseInvite(invite)
   if (!room) return { ok: false, error: 'That invite code is not valid.' }
   await leave()
-  me = { name: String(name).slice(0, 40), room: room.name, authKey: room.authKey }
+  me = { name: String(name).slice(0, 40), secret: room.secret, authKey: room.authKey }
   const topic = room.topic
-  historyFile = path.join(app.getPath('userData'), `history-${topic.toString('hex').slice(0, 16)}.json`)
+  const roomId = topic.toString('hex').slice(0, 16)
+  historyFile = path.join(app.getPath('userData'), `history-${roomId}.json`)
+  metaFile = path.join(app.getPath('userData'), `room-${roomId}.json`)
+  roomMeta = { name: room.name, ts: 0, by: '' } // name from the invite, older than any rename
+  try {
+    const saved = JSON.parse(fs.readFileSync(metaFile, 'utf8'))
+    if (validMeta(saved)) roomMeta = { name: cleanRoomName(saved.name), ts: saved.ts, by: saved.by }
+  } catch {}
   loadHistory()
   toUI('history', history)
 
   swarm = new Hyperswarm()
   swarm.on('connection', onConnection)
   swarm.join(topic, { server: true, client: true })
-  return { ok: true, room: room.name }
+  return { ok: true, ...roomInfo() }
 }
 
 async function leave () {
@@ -230,6 +282,7 @@ ipcMain.handle('settings:set', (e, changes) => {
 ipcMain.handle('join', (e, name, invite) => join(name, invite))
 ipcMain.handle('clipboard:write', (e, text) => clipboard.writeText(String(text)))
 ipcMain.handle('invite:create', (e, roomName) => makeInvite(roomName))
+ipcMain.handle('room:rename', (e, name) => renameRoom(name))
 ipcMain.handle('invite:check', (e, code) => {
   const r = parseInvite(code)
   return r ? r.name : null
