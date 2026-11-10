@@ -1,7 +1,10 @@
 const { contextBridge, ipcRenderer } = require('electron')
 
 contextBridge.exposeInMainWorld('chat', {
-  join: (name, room) => ipcRenderer.invoke('join', name, room),
+  join: (name, invite) => ipcRenderer.invoke('join', name, invite),
+  copy: text => ipcRenderer.invoke('clipboard:write', text),
+  createInvite: roomName => ipcRenderer.invoke('invite:create', roomName),
+  checkInvite: code => ipcRenderer.invoke('invite:check', code),
   leave: () => ipcRenderer.invoke('leave'),
   send: text => ipcRenderer.invoke('send', text),
   version: () => ipcRenderer.invoke('app:version'),

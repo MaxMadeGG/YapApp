@@ -1,7 +1,8 @@
 # YapApp
 
 Serverless group chat. Electron window + Hyperswarm (DHT discovery + NAT hole punching).
-Everyone who joins the same room name finds each other over the internet - no server, no port forwarding.
+Rooms are private and invite-only: create a room, share its invite code, and everyone with the code finds each
+other over the internet - no server, no port forwarding.
 
 ## Install
 Newest build (rebuilt automatically on every push to main):
@@ -25,17 +26,24 @@ Double-click `start.bat` (first run installs dependencies), or `npm install && n
   `git tag vX.Y.Z && git push origin vX.Y.Z`.
 
 ## How it works
-- `main.js` - joins the Hyperswarm topic `sha256("yapapp-room:" + room)`, full mesh between peers.
+- `main.js` - a room is a random 128-bit secret; the invite code is `yap1-<secret b64url>-<room name b64url>`.
+  HKDF(secret) gives the Hyperswarm topic and a separate auth key. Full mesh between peers.
+  Each connection must first send `auth` = HMAC(authKey, role || Noise handshake hash); anything else, a wrong
+  MAC, or no MAC within 15 s disconnects the peer before any message is exchanged.
   Wire protocol: newline-delimited JSON: `hello {name}`, `history {msgs}`, `msg {msg}`.
   On connect each peer sends `ids` (every message id it has); the other side replies with all
   messages it's missing in `history` batches of 200, so people who were offline get the full
   backlog when anyone with it is online. Receivers merge by message id.
 - Full history saved per room in `%APPDATA%\YapApp\history-<hash>.json` (no cap).
 - `preload.js` - IPC bridge; `index.html` - UI.
-- Remembered login (name, room, lastUsed) in `%APPDATA%\YapApp\settings.json`: the app auto-joins on start
+- Remembered login (name, invite, lastUsed) in `%APPDATA%\YapApp\settings.json`: the app auto-joins on start
   until it has not been used for 30 days (`SESSION_DAYS` in index.html). "Leave room" logs out.
 - Test hook: env `YAPAPP_AUTOJOIN="name|room"` joins without the UI.
 
 ## Security
-Intentionally minimal: anyone who knows the room name can join and claim any name.
-Connections are encrypted by Hyperswarm (Noise), and message text is rendered as plain text only.
+- Only people with the invite code can find the room or connect to it; the code is effectively a password
+  (128-bit random, can't be guessed). Share it privately.
+- Peers prove they hold the room secret on every connection, bound to that encrypted session (no replay).
+- Connections are end-to-end encrypted by Hyperswarm (Noise). Message text is rendered as plain text only.
+- Not covered: anyone who has the code can join and pick any display name; there's no way to kick someone
+  except making a new room. History and the invite are stored unencrypted in `%APPDATA%\YapApp\`.

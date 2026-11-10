@@ -56,6 +56,17 @@
     background: #24365f; border-bottom: 1px solid var(--line); font-size: 13px; }
   #updateBar span { flex: 1; }
   #updateBar button { padding: 5px 12px; }
+  #join .or { text-align: center; color: var(--muted); font-size: 12px; margin: 4px 0; }
+  #join .row { display: flex; gap: 8px; }
+  #join .row input { flex: 1; }
+  #joinError { color: #ff7b7b; font-size: 13px; min-height: 18px; margin: 0; }
+  #invitePreview { color: var(--muted); font-size: 12px; min-height: 16px; margin-top: -6px; }
+  #inviteBar { padding: 10px 16px; background: #1f3a2c; border-bottom: 1px solid var(--line); font-size: 13px; }
+  #inviteBar .top { display: flex; align-items: center; gap: 10px; }
+  #inviteBar .top span { flex: 1; }
+  #inviteBar code { display: block; margin-top: 6px; padding: 6px 8px; background: var(--input); border-radius: 6px;
+    font: 12px Consolas, monospace; word-break: break-all; user-select: all; }
+  #inviteBar button { padding: 5px 12px; }
   #version { color: var(--muted); font-size: 11px; text-align: center; margin-top: 4px; }
   #composer { display: flex; gap: 10px; padding: 12px 16px; border-top: 1px solid var(--line); }
   #composer textarea { resize: none; height: 42px; max-height: 140px; }
@@ -66,12 +77,25 @@
 <section id="join">
   <form id="joinForm">
     <h1>YapApp</h1>
-    <p>No server. Everyone who types the same room name finds each other.</p>
+    <p>No server. Rooms are private: you can only get in with an invite code.</p>
     <label for="name">Your name</label>
-    <input id="name" maxlength="40" required autocomplete="off">
-    <label for="room">Room name</label>
-    <input id="room" required autocomplete="off" placeholder="pick something hard to guess">
-    <button type="submit">Join</button>
+    <input id="name" maxlength="40" autocomplete="off">
+
+    <label for="invite">Join a room</label>
+    <div class="row">
+      <input id="invite" autocomplete="off" placeholder="paste invite code (yap1-...)">
+      <button type="button" id="joinBtn">Join</button>
+    </div>
+    <div id="invitePreview"></div>
+
+    <div class="or">or</div>
+
+    <label for="newRoom">Create a room</label>
+    <div class="row">
+      <input id="newRoom" maxlength="40" autocomplete="off" placeholder="room name">
+      <button type="button" id="createBtn">Create</button>
+    </div>
+    <p id="joinError"></p>
   </form>
 </section>
 
@@ -81,6 +105,7 @@
     <div class="me" id="meLabel"></div>
     <h3>Online</h3>
     <ul id="peers"></ul>
+    <button class="ghost" id="inviteBtn">Invite people</button>
     <button class="ghost" id="leaveBtn">Leave room</button>
     <div id="version"></div>
   </aside>
@@ -89,6 +114,14 @@
       <span id="updateText"></span>
       <button id="updateBtn">Restart to update</button>
       <button class="ghost" id="updateLater">Later</button>
+    </div>
+    <div id="inviteBar" class="hidden">
+      <div class="top">
+        <span>Share this invite code with people you want in the room. Anyone who has it can join, so only send it privately.</span>
+        <button id="copyInvite">Copy</button>
+        <button class="ghost" id="closeInvite">Close</button>
+      </div>
+      <code id="inviteCode"></code>
     </div>
     <div id="messages"></div>
     <form id="composer">
@@ -198,30 +231,68 @@
     }
   })
 
-  async function enterRoom (name, room) {
-    store('name', name); store('room', room)
+  function showError (text) { $('joinError').textContent = text || '' }
+
+  async function enterRoom (name, invite, showInvite) {
+    const res = await chat.join(name, invite)
+    if (!res.ok) { showError(res.error); return false }
+    showError('')
+    store('name', name); store('invite', invite)
     touchSession()
-    $('roomLabel').textContent = '# ' + room
+    $('roomLabel').textContent = '# ' + res.room
     $('meLabel').textContent = 'you are ' + name
+    $('inviteCode').textContent = invite
+    $('inviteBar').classList.toggle('hidden', !showInvite)
     $('join').classList.add('hidden')
     $('chat').classList.remove('hidden')
     $('peers').innerHTML = '<li class="none">Looking for peers…</li>'
-    await chat.join(name, room)
     $('input').focus()
+    return true
   }
 
-  $('joinForm').addEventListener('submit', e => {
-    e.preventDefault()
+  function needName () {
     const name = $('name').value.trim()
-    const room = $('room').value.trim()
-    if (name && room) enterRoom(name, room)
+    if (!name) { showError('Type your name first.'); $('name').focus() }
+    return name
+  }
+
+  $('joinBtn').addEventListener('click', () => {
+    const name = needName(); if (!name) return
+    const invite = $('invite').value.trim()
+    if (!invite) { showError('Paste an invite code, or create a room.'); return }
+    enterRoom(name, invite, false)
+  })
+  $('createBtn').addEventListener('click', async () => {
+    const name = needName(); if (!name) return
+    const roomName = $('newRoom').value.trim()
+    if (!roomName) { showError('Give the new room a name.'); $('newRoom').focus(); return }
+    const invite = await chat.createInvite(roomName)
+    $('newRoom').value = ''
+    enterRoom(name, invite, true) // show the invite so it can be shared right away
+  })
+  $('invite').addEventListener('input', async () => {
+    const code = $('invite').value.trim()
+    const room = code ? await chat.checkInvite(code) : null
+    $('invitePreview').textContent = room ? 'Room: ' + room : (code ? 'Not a valid invite code' : '')
+  })
+  $('invite').addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); $('joinBtn').click() } })
+  $('newRoom').addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); $('createBtn').click() } })
+  $('joinForm').addEventListener('submit', e => e.preventDefault())
+
+  $('inviteBtn').addEventListener('click', () => $('inviteBar').classList.toggle('hidden'))
+  $('closeInvite').addEventListener('click', () => $('inviteBar').classList.add('hidden'))
+  $('copyInvite').addEventListener('click', async () => {
+    await chat.copy($('inviteCode').textContent)
+    $('copyInvite').textContent = 'Copied!'
+    setTimeout(() => { $('copyInvite').textContent = 'Copy' }, 1500)
   })
 
   $('leaveBtn').addEventListener('click', async () => {
     await chat.leave()
-    forget('lastUsed') // leaving = log out; name and room stay pre-filled
+    forget('lastUsed') // leaving = log out; name and invite stay pre-filled
     $('name').value = load('name')
-    $('room').value = load('room')
+    $('invite').value = load('invite')
+    $('invite').dispatchEvent(new Event('input'))
     $('chat').classList.add('hidden')
     $('join').classList.remove('hidden')
   })
@@ -252,13 +323,14 @@
   // Startup: rejoin the remembered room, or ask again if the login expired.
   ;(async function startup () {
     settings = await chat.getSettings()
-    const name = load('name'), room = load('room')
+    const name = load('name'), invite = load('invite')
     const lastUsed = Number(load('lastUsed')) || 0
     const fresh = Date.now() - lastUsed < SESSION_DAYS * 24 * 3600 * 1000
-    if (name && room && fresh) return enterRoom(name, room)
-    if (lastUsed && !fresh) { forget('name'); forget('room'); forget('lastUsed') }
+    if (name && invite && fresh && await enterRoom(name, invite, false)) return
+    if (lastUsed && !fresh) { forget('name'); forget('invite'); forget('lastUsed') }
     $('name').value = load('name')
-    $('room').value = load('room')
+    $('invite').value = load('invite')
+    $('invite').dispatchEvent(new Event('input'))
   })()
 </script>
 </body>
