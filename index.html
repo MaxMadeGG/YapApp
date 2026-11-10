@@ -1,0 +1,221 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline'">
+<title>P2P Chat</title>
+<style>
+  :root {
+    --bg: #1e1f24; --panel: #17181c; --line: #2c2e35; --text: #e6e6ea;
+    --muted: #8b8d97; --accent: #5b8cff; --input: #26282f;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text);
+    font: 14px/1.45 "Segoe UI", system-ui, sans-serif; }
+  .hidden { display: none !important; }
+
+  /* Join screen */
+  #join { height: 100%; display: flex; align-items: center; justify-content: center; }
+  #join form { background: var(--panel); border: 1px solid var(--line); border-radius: 12px;
+    padding: 28px; width: 320px; display: flex; flex-direction: column; gap: 12px; }
+  #join h1 { margin: 0 0 4px; font-size: 20px; }
+  #join p { margin: 0 0 8px; color: var(--muted); font-size: 13px; }
+  label { font-size: 12px; color: var(--muted); }
+  input, textarea { width: 100%; background: var(--input); color: var(--text); border: 1px solid var(--line);
+    border-radius: 8px; padding: 9px 11px; font: inherit; outline: none; }
+  input:focus, textarea:focus { border-color: var(--accent); }
+  button { background: var(--accent); color: white; border: 0; border-radius: 8px; padding: 9px 14px;
+    font: inherit; font-weight: 600; cursor: pointer; }
+  button:hover { filter: brightness(1.1); }
+  button.ghost { background: transparent; color: var(--muted); border: 1px solid var(--line); }
+
+  /* Chat screen */
+  #chat { height: 100%; display: flex; }
+  aside { width: 210px; background: var(--panel); border-right: 1px solid var(--line);
+    display: flex; flex-direction: column; padding: 16px; gap: 6px; }
+  aside .room { font-weight: 700; font-size: 16px; word-break: break-word; }
+  aside .me { color: var(--muted); font-size: 12px; margin-bottom: 14px; }
+  aside h3 { font-size: 11px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); margin: 6px 0 4px; }
+  #peers { list-style: none; margin: 0; padding: 0; flex: 1; overflow-y: auto; }
+  #peers li { padding: 3px 0; display: flex; align-items: center; gap: 8px; }
+  #peers li::before { content: ""; width: 8px; height: 8px; border-radius: 50%; background: #3ecf6e; }
+  #peers li.none { color: var(--muted); font-style: italic; }
+  #peers li.none::before { background: var(--muted); }
+
+  main { flex: 1; display: flex; flex-direction: column; min-width: 0; }
+  #messages { flex: 1; overflow-y: auto; padding: 16px 20px; }
+  .msg { padding: 3px 0; }
+  .msg .head { display: flex; gap: 8px; align-items: baseline; margin-top: 10px; }
+  .msg .name { font-weight: 700; }
+  .msg .time { color: var(--muted); font-size: 11px; }
+  .msg .text { white-space: pre-wrap; word-wrap: break-word; }
+  .sys { color: var(--muted); font-size: 12px; font-style: italic; padding: 6px 0; }
+  .empty { color: var(--muted); text-align: center; margin-top: 30%; }
+
+  #composer { display: flex; gap: 10px; padding: 12px 16px; border-top: 1px solid var(--line); }
+  #composer textarea { resize: none; height: 42px; max-height: 140px; }
+</style>
+</head>
+<body>
+
+<section id="join">
+  <form id="joinForm">
+    <h1>P2P Chat</h1>
+    <p>No server. Everyone who types the same room name finds each other.</p>
+    <label for="name">Your name</label>
+    <input id="name" maxlength="40" required autocomplete="off">
+    <label for="room">Room name</label>
+    <input id="room" required autocomplete="off" placeholder="pick something hard to guess">
+    <button type="submit">Join</button>
+  </form>
+</section>
+
+<section id="chat" class="hidden">
+  <aside>
+    <div class="room" id="roomLabel"></div>
+    <div class="me" id="meLabel"></div>
+    <h3>Online</h3>
+    <ul id="peers"></ul>
+    <button class="ghost" id="leaveBtn">Leave room</button>
+  </aside>
+  <main>
+    <div id="messages"></div>
+    <form id="composer">
+      <textarea id="input" placeholder="Message… (Enter to send, Shift+Enter for new line)"></textarea>
+      <button type="submit">Send</button>
+    </form>
+  </main>
+</section>
+
+<script>
+  const $ = id => document.getElementById(id)
+  const messagesEl = $('messages')
+  let lastName = null
+
+  function store (k, v) { try { localStorage.setItem(k, v) } catch {} }
+  function load (k) { try { return localStorage.getItem(k) || '' } catch { return '' } }
+  $('name').value = load('name')
+  $('room').value = load('room')
+
+  function colorFor (name) {
+    let h = 0
+    for (const c of name) h = (h * 31 + c.charCodeAt(0)) % 360
+    return `hsl(${h}, 70%, 68%)`
+  }
+
+  function fmtTime (ts) {
+    const d = new Date(ts)
+    const today = new Date().toDateString() === d.toDateString()
+    const t = d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+    return today ? t : d.toLocaleDateString() + ' ' + t
+  }
+
+  function nearBottom () {
+    return messagesEl.scrollHeight - messagesEl.scrollTop - messagesEl.clientHeight < 80
+  }
+
+  function addMsg (m, forceScroll) {
+    const stick = forceScroll || nearBottom()
+    messagesEl.querySelector('.empty')?.remove()
+    const div = document.createElement('div')
+    div.className = 'msg'
+    if (m.name !== lastName) {
+      const head = document.createElement('div')
+      head.className = 'head'
+      const n = document.createElement('span')
+      n.className = 'name'
+      n.textContent = m.name
+      n.style.color = colorFor(m.name)
+      const t = document.createElement('span')
+      t.className = 'time'
+      t.textContent = fmtTime(m.ts)
+      head.append(n, t)
+      div.append(head)
+    }
+    const text = document.createElement('div')
+    text.className = 'text'
+    text.textContent = m.text
+    div.append(text)
+    messagesEl.append(div)
+    lastName = m.name
+    if (stick) messagesEl.scrollTop = messagesEl.scrollHeight
+  }
+
+  function addSys (text) {
+    const div = document.createElement('div')
+    div.className = 'sys'
+    div.textContent = text
+    messagesEl.append(div)
+    lastName = null
+    if (nearBottom()) messagesEl.scrollTop = messagesEl.scrollHeight
+  }
+
+  function renderHistory (list) {
+    messagesEl.innerHTML = ''
+    lastName = null
+    if (!list.length) {
+      const e = document.createElement('div')
+      e.className = 'empty'
+      e.textContent = 'No messages yet. Say hi!'
+      messagesEl.append(e)
+      return
+    }
+    for (const m of list) addMsg(m, true)
+  }
+
+  chat.on('history', renderHistory)
+  chat.on('message', m => addMsg(m))
+  chat.on('system', addSys)
+  chat.on('peers', list => {
+    const ul = $('peers')
+    ul.innerHTML = ''
+    if (!list.length) {
+      const li = document.createElement('li')
+      li.className = 'none'
+      li.textContent = 'Looking for peers…'
+      ul.append(li)
+    }
+    for (const n of list) {
+      const li = document.createElement('li')
+      li.textContent = n
+      ul.append(li)
+    }
+  })
+
+  $('joinForm').addEventListener('submit', async e => {
+    e.preventDefault()
+    const name = $('name').value.trim()
+    const room = $('room').value.trim()
+    if (!name || !room) return
+    store('name', name); store('room', room)
+    $('roomLabel').textContent = '# ' + room
+    $('meLabel').textContent = 'you are ' + name
+    $('join').classList.add('hidden')
+    $('chat').classList.remove('hidden')
+    $('peers').innerHTML = '<li class="none">Looking for peers…</li>'
+    await chat.join(name, room)
+    $('input').focus()
+  })
+
+  $('leaveBtn').addEventListener('click', async () => {
+    await chat.leave()
+    $('chat').classList.add('hidden')
+    $('join').classList.remove('hidden')
+  })
+
+  async function sendInput () {
+    const input = $('input')
+    const text = input.value
+    if (!text.trim()) return
+    input.value = ''
+    const m = await chat.send(text)
+    if (m) addMsg(m, true)
+  }
+
+  $('composer').addEventListener('submit', e => { e.preventDefault(); sendInput() })
+  $('input').addEventListener('keydown', e => {
+    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendInput() }
+  })
+</script>
+</body>
+</html>
