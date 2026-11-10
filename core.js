@@ -219,15 +219,35 @@ function createCore ({ fs, dataDir, emit }) {
     } else if (msg.type === 'history' && Array.isArray(msg.msgs)) {
       if (addMessages(msg.msgs)) emit('history', history)
     } else if (msg.type === 'msg') {
-      if (addMessages([msg.msg])) emit('message', msg.msg)
+      if (addMessages([msg.msg])) {
+        emit('message', msg.msg)
+        forward(conn, { type: 'msg', msg: msg.msg })
+      }
     } else if (msg.type === 'meta') {
-      if (applyMeta(msg.meta)) emit('system', `${roomMeta.by} renamed the room to "${roomMeta.name}"`)
+      if (applyMeta(msg.meta)) {
+        emit('system', `${roomMeta.by} renamed the room to "${roomMeta.name}"`)
+        forward(conn, { type: 'meta', meta: roomMeta })
+      }
     }
+  }
+
+  // Gossip: pass new messages/renames on to our other peers, so people who
+  // couldn't connect to each other directly still get them. Message ids (and
+  // meta timestamps) are deduplicated, so this never loops.
+  function forward (from, obj) {
+    for (const conn of peers.keys()) if (conn !== from) write(conn, obj)
   }
 
   async function join (name, invite) {
     const room = parseInvite(invite)
     if (!room) return { ok: false, error: 'That invite code is not valid.' }
+    // Already in this room as this name (e.g. the Android UI reattaching to the
+    // background service): just resend the current state, don't reconnect.
+    if (swarm && me && b4a.equals(me.secret, room.secret) && me.name === String(name).slice(0, 40)) {
+      emit('history', history)
+      sendPeers()
+      return { ok: true, ...roomInfo() }
+    }
     await leave()
     me = { name: String(name).slice(0, 40), secret: room.secret, authKey: room.authKey }
     const roomId = b4a.toString(room.topic, 'hex').slice(0, 16)
@@ -297,7 +317,23 @@ function createCore ({ fs, dataDir, emit }) {
     return r ? r.name : null
   }
 
-  return { join, leave, send, renameRoom, createInvite: makeInvite, checkInvite, getSettings, setSettings }
+  // Diagnostics: what the swarm/DHT thinks about our network situation.
+  function debugInfo () {
+    if (!swarm) return { joined: false }
+    const dht = swarm.dht
+    return {
+      joined: true,
+      firewalled: dht.firewalled,
+      host: dht.host,
+      port: dht.port,
+      randomized: dht.randomized,
+      connections: swarm.connections.size,
+      connecting: swarm.connecting,
+      authedPeers: peers.size
+    }
+  }
+
+  return { join, leave, send, renameRoom, createInvite: makeInvite, checkInvite, getSettings, setSettings, debugInfo }
 }
 
 module.exports = { createCore, parseInvite, makeInvite, hmacSha256, hkdf32 }

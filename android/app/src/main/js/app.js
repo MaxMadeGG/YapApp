@@ -3,25 +3,49 @@
 // Protocol, one JSON object per line:
 //   host -> here:  { id, method, args }
 //   here -> host:  { id, result } | { id, error } | { event, data }
+// Besides the UI's events we emit 'status' { name, room, peers } so the Java
+// service can show the connection notification and message notifications.
 const fs = require('bare-fs')
 const b4a = require('b4a')
 const { createCore } = require('./core.js')
 
 const IPC = BareKit.IPC
-const dataDir = Bare.argv[Bare.argv.length - 1] // app's private files dir, passed by MainActivity
+const dataDir = Bare.argv[Bare.argv.length - 1] // app's private files dir, passed by the service
 
 const send = obj => IPC.write(b4a.from(JSON.stringify(obj) + '\n'))
-const core = createCore({ fs, dataDir, emit: (event, data) => send({ event, data }) })
+
+const status = { name: null, room: null, peers: 0 }
+const sendStatus = () => send({ event: 'status', data: status })
+
+const core = createCore({
+  fs,
+  dataDir,
+  emit: (event, data) => {
+    send({ event, data })
+    if (event === 'peers') { status.peers = data.length; sendStatus() }
+    if (event === 'room') { status.room = data.room; sendStatus() }
+  }
+})
 
 const methods = {
-  join: (name, invite) => core.join(name, invite),
-  leave: () => core.leave(),
+  join: async (name, invite) => {
+    const res = await core.join(name, invite)
+    if (res.ok) { status.name = String(name).slice(0, 40); status.room = res.room; sendStatus() }
+    return res
+  },
+  leave: async () => {
+    await core.leave()
+    Object.assign(status, { name: null, room: null, peers: 0 })
+    sendStatus()
+  },
   send: text => core.send(text),
   renameRoom: name => core.renameRoom(name),
   createInvite: name => core.createInvite(name),
   checkInvite: code => core.checkInvite(code),
   getSettings: () => core.getSettings(),
-  setSettings: changes => core.setSettings(changes)
+  setSettings: changes => core.setSettings(changes),
+  getStatus: () => status,
+  debug: () => core.debugInfo()
 }
 
 let buf = b4a.alloc(0)

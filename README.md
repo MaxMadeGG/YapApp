@@ -42,10 +42,15 @@ gradlew assembleDebug    # -> app/build/outputs/apk/debug/app-debug.apk
 ```
 Test the worklet on the desktop with Bare: `npm run test:bare -- <invite> <dataDir>`.
 Bare Kit is pinned to v2.5.5 with bare-pack/bare-link ^1 (addons need `--needs libbare-kit.so`).
+Background: `YapService` (foreground service, type remoteMessaging) owns the worklet, so the chat stays
+connected after leaving the app; it shows "Connected to #room" with a Disconnect button and posts a
+notification for messages from others while the UI isn't visible. The activity just binds to it.
+On Xiaomi/MIUI also allow Autostart and set Battery saver to "No restrictions" for YapApp.
 Only `arm64-v8a` is packaged (see `abiFilters` in `app/build.gradle`).
 
 ## How it works
 - `core.js` (shared by desktop and Android; crypto is HKDF/HMAC-SHA256 via sodium so both runtimes match)
+  - new messages and renames are gossiped on to other peers (deduped by id), so a partial mesh still gets everything
   - a room is a random 128-bit secret; the invite code is `yap1-<secret b64url>-<room name b64url>`.
   HKDF(secret) gives the Hyperswarm topic and a separate auth key. Full mesh between peers.
   Each connection must first send `auth` = HMAC(authKey, role || Noise handshake hash); anything else, a wrong

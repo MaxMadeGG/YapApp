@@ -1,6 +1,11 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
   <uses-permission android:name="android.permission.INTERNET" />
+  <!-- stay connected in the background + notify about new messages -->
+  <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+  <uses-permission android:name="android.permission.FOREGROUND_SERVICE_REMOTE_MESSAGING" />
+  <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+  <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
 
   <application
     android:label="YapApp"
@@ -11,6 +16,7 @@
     <activity
       android:name=".MainActivity"
       android:exported="true"
+      android:launchMode="singleTask"
       android:configChanges="orientation|screenSize|screenLayout|keyboardHidden|keyboard|uiMode"
       android:windowSoftInputMode="adjustResize">
       <intent-filter>
@@ -18,5 +24,9 @@
         <category android:name="android.intent.category.LAUNCHER" />
       </intent-filter>
     </activity>
+    <service
+      android:name=".YapService"
+      android:exported="false"
+      android:foregroundServiceType="remoteMessaging" />
   </application>
 </manifest>

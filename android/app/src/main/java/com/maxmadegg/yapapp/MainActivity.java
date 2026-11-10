@@ -1,17 +1,26 @@
 package com.maxmadegg.yapapp;
 
+import android.Manifest;
+import android.annotation.SuppressLint;
 import android.app.Activity;
 import android.content.ClipData;
 import android.content.ClipboardManager;
+import android.content.ComponentName;
 import android.content.Context;
+import android.content.Intent;
+import android.content.ServiceConnection;
+import android.content.SharedPreferences;
 import android.content.pm.PackageInfo;
+import android.content.pm.PackageManager;
 import android.graphics.Insets;
+import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
-import android.os.HandlerThread;
+import android.os.IBinder;
 import android.os.Looper;
-import android.util.Log;
+import android.os.PowerManager;
+import android.provider.Settings;
 import android.view.View;
 import android.view.WindowInsets;
 import android.webkit.JavascriptInterface;
@@ -21,36 +30,44 @@ import android.widget.FrameLayout;
 
 import org.json.JSONObject;
 
-import java.io.ByteArrayOutputStream;
-import java.nio.ByteBuffer;
-import java.nio.charset.StandardCharsets;
-import java.util.ArrayDeque;
-
-import to.holepunch.bare.kit.IPC;
-import to.holepunch.bare.kit.Worklet;
+import java.util.ArrayList;
+import java.util.List;
 
 /**
- * Hosts the shared chat UI (assets/www/index.html) in a WebView and runs the
- * chat core (assets/app.bundle = core.js + Hyperswarm) in a Bare Kit worklet.
+ * Shows the shared chat UI (assets/www/index.html) in a WebView. The chat core
+ * itself runs in YapService (so it keeps going in the background); this
+ * activity binds to it and relays lines both ways:
  *
- * WebView  --YapNative.post(line)-->  IPC thread  --BareKit.IPC-->  worklet
- * WebView  <--window.__yapRecv(line)--  main thread  <--  IPC thread  <--  worklet
- * Lines are newline-delimited JSON (see app/src/main/js/app.js).
+ * WebView --YapNative.post(line)--> YapService --> Bare worklet
+ * WebView <--window.__yapRecv(line)-- YapService <-- Bare worklet
  */
 public class MainActivity extends Activity {
-  private static final String TAG = "YapApp";
-
   private WebView webView;
-  private Worklet worklet;
-  private IPC ipc;
-  private HandlerThread ipcThread;
-  private Handler ipcHandler;
+  private YapService service;
   private final Handler mainHandler = new Handler(Looper.getMainLooper());
+  private final List<String> pendingPosts = new ArrayList<>(); // lines sent before the service connected
 
-  // IPC-thread state
-  private final ByteArrayOutputStream readBuf = new ByteArrayOutputStream();
-  private final ArrayDeque<ByteBuffer> writeQueue = new ArrayDeque<>();
+  private final ServiceConnection connection = new ServiceConnection() {
+    @Override
+    public void onServiceConnected(ComponentName name, IBinder binder) {
+      service = ((YapService.LocalBinder) binder).service();
+      service.setListener(line -> {
+        final String js = "window.__yapRecv && window.__yapRecv(" + JSONObject.quote(line) + ")";
+        mainHandler.post(() -> { if (webView != null) webView.evaluateJavascript(js, null); });
+        maybeAskBatteryExemption(line);
+      });
+      service.setUiVisible(hasWindowFocus() || isResumedNow);
+      for (String l : pendingPosts) service.post(l);
+      pendingPosts.clear();
+    }
 
+    @Override
+    public void onServiceDisconnected(ComponentName name) { service = null; }
+  };
+
+  private boolean isResumedNow;
+
+  @SuppressLint("SetJavaScriptEnabled")
   @Override
   protected void onCreate(Bundle savedInstanceState) {
     super.onCreate(savedInstanceState);
@@ -68,7 +85,15 @@ public class MainActivity extends Activity {
     webView.setBackgroundColor(0xff1e1f24);
     webView.addJavascriptInterface(new Bridge(), "YapNative");
 
-    startWorklet();
+    // Bound now; also *started* in onResume (Android 12+ only allows that once
+    // we're really in the foreground) so it can outlive this activity in a room.
+    bindService(new Intent(this, YapService.class), connection, Context.BIND_AUTO_CREATE);
+
+    if (Build.VERSION.SDK_INT >= 33 &&
+        checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
+      requestPermissions(new String[] { Manifest.permission.POST_NOTIFICATIONS }, 1);
+    }
+
     webView.loadUrl("file:///android_asset/www/index.html");
   }
 
@@ -89,80 +114,34 @@ public class MainActivity extends Activity {
     });
   }
 
-  private void startWorklet() {
-    ipcThread = new HandlerThread("yapapp-ipc");
-    ipcThread.start();
-    ipcHandler = new Handler(ipcThread.getLooper());
-    final String dataDir = getFilesDir().getAbsolutePath();
-
-    ipcHandler.post(() -> {
+  // First time we're in a room, ask once to be exempt from battery
+  // optimisation so Android doesn't cut the connection while the phone sleeps.
+  private void maybeAskBatteryExemption(String line) {
+    if (!line.contains("\"event\":\"status\"") || line.contains("\"room\":null")) return;
+    mainHandler.post(() -> {
+      SharedPreferences prefs = getSharedPreferences("yapapp", MODE_PRIVATE);
+      if (prefs.getBoolean("askedBattery", false)) return;
+      PowerManager pm = getSystemService(PowerManager.class);
+      if (pm.isIgnoringBatteryOptimizations(getPackageName())) return;
+      prefs.edit().putBoolean("askedBattery", true).apply();
       try {
-        worklet = new Worklet(null);
-        worklet.start("/app.bundle", getAssets().open("app.bundle"), new String[] { dataDir });
-        ipc = new IPC(worklet);
-        ipc.readable(this::onReadable);
-        flushWrites();
-      } catch (Exception e) {
-        Log.e(TAG, "failed to start worklet", e);
-      }
+        @SuppressLint("BatteryLife")
+        Intent i = new Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS,
+          Uri.parse("package:" + getPackageName()));
+        startActivity(i);
+      } catch (Exception ignored) {}
     });
-  }
-
-  // IPC thread: drain everything available, forward complete lines to the UI.
-  private void onReadable() {
-    ByteBuffer data;
-    while ((data = ipc.read()) != null) {
-      if (data.limit() == 0) { ipc.readable(null); return; } // worklet closed its end
-      byte[] bytes = new byte[data.remaining()];
-      data.get(bytes);
-      for (byte by : bytes) {
-        if (by == '\n') {
-          String line = new String(readBuf.toByteArray(), StandardCharsets.UTF_8);
-          readBuf.reset();
-          deliver(line);
-        } else {
-          readBuf.write(by);
-        }
-      }
-    }
-  }
-
-  private void deliver(String line) {
-    final String js = "window.__yapRecv && window.__yapRecv(" + JSONObject.quote(line) + ")";
-    mainHandler.post(() -> { if (webView != null) webView.evaluateJavascript(js, null); });
-  }
-
-  // IPC thread: write queued lines, waiting for writable() on backpressure.
-  private void flushWrites() {
-    if (ipc == null) return;
-    while (!writeQueue.isEmpty()) {
-      ByteBuffer head = writeQueue.peek();
-      int n = ipc.write(head);
-      if (n < 0) { Log.e(TAG, "IPC write failed: " + n); writeQueue.clear(); break; }
-      if (n < head.remaining()) {
-        head.position(head.position() + n);
-        writeQueue.poll();
-        writeQueue.addFirst(head.slice());
-        ipc.writable(this::flushWrites);
-        return;
-      }
-      writeQueue.poll();
-    }
-    ipc.writable(null);
-  }
-
-  private void enqueue(String line) {
-    byte[] bytes = (line + "\n").getBytes(StandardCharsets.UTF_8);
-    ByteBuffer buf = ByteBuffer.allocateDirect(bytes.length);
-    buf.put(bytes);
-    buf.flip();
-    ipcHandler.post(() -> { writeQueue.add(buf); flushWrites(); });
   }
 
   /** Exposed to the page as window.YapNative (see assets/www/bridge.js). */
   private class Bridge {
     @JavascriptInterface
-    public void post(String line) { enqueue(line); }
+    public void post(String line) {
+      mainHandler.post(() -> {
+        if (service != null) service.post(line);
+        else pendingPosts.add(line);
+      });
+    }
 
     @JavascriptInterface
     public void copy(String text) {
@@ -182,28 +161,29 @@ public class MainActivity extends Activity {
   }
 
   @Override
-  protected void onPause() {
-    super.onPause();
-    if (ipcHandler != null) ipcHandler.post(() -> { if (worklet != null) worklet.suspend(); });
+  protected void onResume() {
+    super.onResume();
+    isResumedNow = true;
+    try {
+      startService(new Intent(this, YapService.class));
+    } catch (IllegalStateException e) {
+      // Background-start restriction; binding still works, retried on next resume.
+    }
+    if (service != null) service.setUiVisible(true);
   }
 
   @Override
-  protected void onResume() {
-    super.onResume();
-    if (ipcHandler != null) ipcHandler.post(() -> { if (worklet != null) worklet.resume(); });
+  protected void onPause() {
+    super.onPause();
+    isResumedNow = false;
+    if (service != null) service.setUiVisible(false);
   }
 
   @Override
   protected void onDestroy() {
-    if (ipcHandler != null) {
-      ipcHandler.post(() -> {
-        try { if (ipc != null) ipc.close(); } catch (Exception ignored) {}
-        if (worklet != null) worklet.terminate();
-        ipc = null;
-        worklet = null;
-      });
-      ipcThread.quitSafely();
-    }
+    if (service != null) service.setListener(null);
+    unbindService(connection);
+    service = null;
     if (webView != null) { webView.destroy(); webView = null; }
     super.onDestroy();
   }
