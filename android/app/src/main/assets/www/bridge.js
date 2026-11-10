@@ -39,7 +39,7 @@
     setSettings: changes => call('setSettings', changes),
     copy: text => Promise.resolve(window.YapNative.copy(String(text))),
     version: () => Promise.resolve(window.YapNative.version()),
-    installUpdate: () => {}, // Android updates come from a new APK
+    installUpdate: () => window.YapNative.installUpdate(), // system installer asks to confirm
     on: (channel, fn) => { (listeners[channel] = listeners[channel] || []).push(fn) }
   }
 })()

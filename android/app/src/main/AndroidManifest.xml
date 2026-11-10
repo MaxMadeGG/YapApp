@@ -6,6 +6,8 @@
   <uses-permission android:name="android.permission.FOREGROUND_SERVICE_REMOTE_MESSAGING" />
   <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
   <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
+  <!-- self-update from GitHub releases (user confirms each install) -->
+  <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
 
   <application
     android:label="YapApp"
@@ -28,5 +30,6 @@
       android:name=".YapService"
       android:exported="false"
       android:foregroundServiceType="remoteMessaging" />
+    <receiver android:name=".Updater$InstallResult" android:exported="false" />
   </application>
 </manifest>

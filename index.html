@@ -376,7 +376,11 @@
   // Self-update: main process downloads in the background, we offer a restart.
   chat.version().then(v => { $('version').textContent = 'YapApp v' + v })
   chat.on('update-ready', v => {
-    $('updateText').textContent = `YapApp ${v} is ready. It also installs automatically when you close the app.`
+    const android = !!window.YapNative
+    $('updateText').textContent = android
+      ? `YapApp ${v} is available.`
+      : `YapApp ${v} is ready. It also installs automatically when you close the app.`
+    $('updateBtn').textContent = android ? 'Install update' : 'Restart to update'
     $('updateBar').classList.remove('hidden')
   })
   $('updateBtn').addEventListener('click', () => chat.installUpdate())

@@ -26,6 +26,7 @@ import android.view.WindowInsets;
 import android.webkit.JavascriptInterface;
 import android.webkit.WebSettings;
 import android.webkit.WebView;
+import android.webkit.WebViewClient;
 import android.widget.FrameLayout;
 
 import org.json.JSONObject;
@@ -66,6 +67,14 @@ public class MainActivity extends Activity {
   };
 
   private boolean isResumedNow;
+  private Updater updater;
+  private String updateVersion; // downloaded update waiting for the user
+
+  private void showUpdate() {
+    if (updateVersion == null || webView == null) return;
+    String line = "{\"event\":\"update-ready\",\"data\":" + JSONObject.quote(updateVersion) + "}";
+    webView.evaluateJavascript("window.__yapRecv && window.__yapRecv(" + JSONObject.quote(line) + ")", null);
+  }
 
   @SuppressLint("SetJavaScriptEnabled")
   @Override
@@ -84,6 +93,11 @@ public class MainActivity extends Activity {
     s.setAllowFileAccess(true);
     webView.setBackgroundColor(0xff1e1f24);
     webView.addJavascriptInterface(new Bridge(), "YapNative");
+    webView.setWebViewClient(new WebViewClient() {
+      @Override
+      public void onPageFinished(WebView view, String url) { showUpdate(); }
+    });
+    updater = new Updater(this);
 
     // Bound now; also *started* in onResume (Android 12+ only allows that once
     // we're really in the foreground) so it can outlive this activity in a room.
@@ -150,6 +164,9 @@ public class MainActivity extends Activity {
     }
 
     @JavascriptInterface
+    public void installUpdate() { updater.install(); }
+
+    @JavascriptInterface
     public String version() {
       try {
         PackageInfo p = getPackageManager().getPackageInfo(getPackageName(), 0);
@@ -170,6 +187,7 @@ public class MainActivity extends Activity {
       // Background-start restriction; binding still works, retried on next resume.
     }
     if (service != null) service.setUiVisible(true);
+    updater.checkAsync(false, v -> mainHandler.post(() -> { updateVersion = v; showUpdate(); }));
   }
 
   @Override

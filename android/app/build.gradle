@@ -22,6 +22,27 @@ android {
     }
   }
 
+  // One signing key for every build, so installed apps accept updates.
+  // CI: YAPAPP_KEYSTORE points at the key decoded from a GitHub secret.
+  // Locally: this PC's ~/.android/debug.keystore (the same key).
+  signingConfigs {
+    yap {
+      def ks = System.getenv("YAPAPP_KEYSTORE") ?: "${System.getProperty('user.home')}/.android/debug.keystore"
+      storeFile file(ks)
+      storePassword System.getenv("YAPAPP_KEYSTORE_PASSWORD") ?: "android"
+      keyAlias System.getenv("YAPAPP_KEY_ALIAS") ?: "androiddebugkey"
+      keyPassword System.getenv("YAPAPP_KEY_PASSWORD") ?: "android"
+    }
+  }
+
+  buildTypes {
+    debug { signingConfig signingConfigs.yap }
+    release {
+      signingConfig signingConfigs.yap
+      minifyEnabled false
+    }
+  }
+
   sourceSets {
     main {
       // Bare Kit runtime + the linked native addons (udx-native, sodium-native, ...)

@@ -13,8 +13,10 @@ Installed apps update themselves: on start (and every 4 hours) YapApp checks the
 downloads a newer build in the background and offers "Restart to update" (or installs on quit).
 Needs the repo to be public. Rolling builds are versioned `major.minor.<CI run number>`.
 
-**Android:** build the APK yourself for now (see below) and install it on the phone
-(allow "Install unknown apps" for your file manager or browser). Phones and PCs join the same rooms.
+- **Android:** [YapApp.apk](https://github.com/MaxMadeGG/YapApp/releases/download/latest/YapApp.apk) - allow "Install unknown apps"
+  for your browser/file manager. Phones and PCs join the same rooms. The app checks `android-latest.json` on the
+  `latest` release when opened (every 4 h at most), downloads a newer APK and shows "Install update"; Android asks
+  you to confirm (first time: allow YapApp as an install source).
 
 Older fixed versions are on the [Releases](https://github.com/MaxMadeGG/YapApp/releases) page.
 
@@ -46,6 +48,10 @@ Background: `YapService` (foreground service, type remoteMessaging) owns the wor
 connected after leaving the app; it shows "Connected to #room" with a Disconnect button and posts a
 notification for messages from others while the UI isn't visible. The activity just binds to it.
 On Xiaomi/MIUI also allow Autostart and set Battery saver to "No restrictions" for YapApp.
+Signing: every build (debug, release, CI) uses one key so updates install over each other. Locally that's this
+PC's `~/.android/debug.keystore`; CI gets the same file from the `ANDROID_KEYSTORE_B64` repo secret (base64).
+**Back up that keystore** - if it's lost, phones must uninstall and reinstall to get updates.
+Debug builds only: `files/update-feed.txt` (via `adb shell run-as`) overrides the update feed URL for testing.
 Only `arm64-v8a` is packaged (see `abiFilters` in `app/build.gradle`).
 
 ## How it works

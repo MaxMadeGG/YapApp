@@ -62,8 +62,77 @@ jobs:
             release/latest*.yml
             release/*.blockmap
 
+  android:
+    runs-on: ubuntu-latest
+    env:
+      KEYSTORE_B64: ${{ secrets.ANDROID_KEYSTORE_B64 }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Signing key present?
+        id: key
+        run: |
+          if [ -z "$KEYSTORE_B64" ]; then
+            echo "::warning::No ANDROID_KEYSTORE_B64 secret - skipping the Android APK"
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+          fi
+      - uses: actions/setup-node@v4
+        if: steps.key.outputs.skip != 'true'
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: android/package-lock.json
+      - uses: actions/setup-java@v4
+        if: steps.key.outputs.skip != 'true'
+        with:
+          distribution: temurin
+          java-version: 17
+      - name: Version (same scheme as desktop)
+        if: steps.key.outputs.skip != 'true'
+        run: |
+          if [[ "$GITHUB_REF" != refs/tags/* ]]; then
+            base=$(node -p "require('./package.json').version.split('.').slice(0,2).join('.')")
+            npm version --no-git-tag-version --allow-same-version "$base.${{ github.run_number }}"
+          fi
+          echo "VERSION=$(node -p "require('./package.json').version")" >> "$GITHUB_ENV"
+      - name: Decode signing key
+        if: steps.key.outputs.skip != 'true'
+        run: |
+          echo "$KEYSTORE_B64" | base64 -d > "$RUNNER_TEMP/yapapp.keystore"
+          echo "YAPAPP_KEYSTORE=$RUNNER_TEMP/yapapp.keystore" >> "$GITHUB_ENV"
+      - name: Prepare (Bare Kit, shared UI/core, addons, bundle)
+        if: steps.key.outputs.skip != 'true'
+        working-directory: android
+        run: npm ci && npm run prepare
+      - name: Build signed APK
+        if: steps.key.outputs.skip != 'true'
+        working-directory: android
+        env:
+          YAPAPP_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD || 'android' }}
+          YAPAPP_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS || 'androiddebugkey' }}
+          YAPAPP_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD || 'android' }}
+        run: chmod +x gradlew && ./gradlew assembleRelease --no-daemon --console=plain
+      - name: Collect APK (+ update feed for the rolling build)
+        if: steps.key.outputs.skip != 'true'
+        run: |
+          mkdir -p out
+          apk=android/app/build/outputs/apk/release/app-release.apk
+          if [[ "$GITHUB_REF" == refs/tags/* ]]; then
+            cp "$apk" "out/YapApp-$VERSION.apk"
+          else
+            cp "$apk" out/YapApp.apk
+            # versionCode must match app/build.gradle: major*1000000 + minor*10000 + patch
+            node -e "const v=process.env.VERSION,[a,b,c]=v.split('.').map(Number);require('fs').writeFileSync('out/android-latest.json',JSON.stringify({versionCode:a*1000000+b*10000+c,versionName:v,url:'https://github.com/MaxMadeGG/YapApp/releases/download/latest/YapApp.apk'}))"
+            cat out/android-latest.json
+          fi
+      - uses: actions/upload-artifact@v4
+        if: steps.key.outputs.skip != 'true'
+        with:
+          name: installers-android
+          path: out/*
+
   release:
-    needs: build
+    needs: [build, android]
+    if: ${{ always() && needs.build.result == 'success' }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -88,6 +157,7 @@ jobs:
             Built automatically from the newest commit on main (${{ github.sha }}).
             - Windows: YapApp-Setup.exe
             - Linux: YapApp.AppImage (chmod +x, then run) or YapApp.deb (sudo apt install ./YapApp.deb)
+            - Android: YapApp.apk (installed apps update themselves)
           make_latest: true
           files: out/*
 
