@@ -76,6 +76,15 @@ README.md has install/build details; this file is "where things stand".
 - Custom emojis: CUSTOM_EMOJI in index.html (name -> inline SVG data URL; :sadshit: drawn by hand 2026-11-11).
   Messages keep the :name: text; richText() swaps known names for <img class=cemoji>; works in reactions, quick
   bar, and the panel's "Custom" tab. Add more by adding entries (no protocol change).
+- Edit/delete (2026-11-11): kind:'edit' {target,text} / kind:'del' {target} entries (DMs: {edit}/{del} inside the
+  encrypted payload). Only the author's own change counts (matched by name). core.applyDeletes() turns deleted
+  messages into tombstones {deleted:true} everywhere, blanks edits of them and removes their blobs. UI keeps
+  edits/dels maps; deleted msgs vanish unless they have thread replies ("This message was deleted.").
+- Profiles (2026-11-11): kind:'profile' now = {pic, info:{title,pronouns,email,phone,location,about}} - the WHOLE
+  profile each time, newest wins. Saved in settings 'profile' {pic,info,ts} (old 'pfp' still read); on joining a
+  room syncMyProfile() publishes it if the room has an older one, or adopts a newer one from your other device.
+  FIXED: profile was re-published on every start (history arrived before myName was set). Click a picture/name
+  -> profile card; your own card -> Edit profile dialog.
 - Ideas next: unread badges for other ROOMS (needs multi-room core), more emojis, edit/delete messages,
   remember last channel per room.
 

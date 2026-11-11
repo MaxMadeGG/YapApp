@@ -14,7 +14,7 @@ const MAX_FILE = 50 * 1024 * 1024 // per attached file
 const MAX_FILES = 50              // per message
 const CHUNK = 256 * 1024          // file transfer piece size
 const WANT_TIMEOUT = 60000        // give up fetching a file after this long without progress
-const SETTINGS_KEYS = ['name', 'invite', 'lastUsed', 'rooms', 'pfp'] // rooms = JSON list of remembered invites
+const SETTINGS_KEYS = ['name', 'invite', 'lastUsed', 'rooms', 'pfp', 'profile'] // rooms = JSON list of remembered invites
 
 // ---- Crypto helpers (SHA-256 based, identical on every runtime) -------------
 function sha256 (...parts) {
@@ -96,6 +96,10 @@ function validMeta (m) {
 //  - kind 'dm': a direct message, encrypted (crypto_box) separately for every device of
 //    the two people { toName, from: sender pk, boxes: { pk: { n: nonce, c: ciphertext } } }.
 //    Everyone stores and forwards it, only those two can read it.
+//  - kind 'edit': new text for one of the author's own messages { target } (newest wins).
+//  - kind 'del': the author deleted their message { target }. Everyone wipes the target's text and
+//    files (it becomes a tombstone { deleted: true }), so it's really gone, not just hidden.
+//    DMs do the same inside the encrypted payload ({ edit } / { del }).
 //  - ch: the channel a message belongs to (missing = 'general').
 //  - files: attachments [{ h: blob hash, k: blob key, n: name, s: size, m: mime, p?: path in a folder }].
 //    Blobs are encrypted with their own random key (secretbox) and fetched from peers by hash;
@@ -104,6 +108,20 @@ function validMeta (m) {
 const isId = v => typeof v === 'string' && v.length > 0 && v.length <= 64
 const isHex = (v, n) => typeof v === 'string' && v.length === n && /^[0-9a-f]+$/.test(v)
 const MAX_BOXES = 16
+// Profile details people can fill in (all optional, shared with everyone in the room).
+const INFO_FIELDS = { title: 80, pronouns: 30, email: 120, phone: 40, location: 80, about: 600 }
+function cleanInfo (x) {
+  if (x === undefined || x === null) return {}
+  if (typeof x !== 'object' || Array.isArray(x)) return null
+  const out = {}
+  for (const [k, max] of Object.entries(INFO_FIELDS)) {
+    if (x[k] === undefined) continue
+    if (typeof x[k] !== 'string') return null
+    const v = x[k].trim().slice(0, max)
+    if (v) out[k] = v
+  }
+  return out
+}
 function cleanFiles (f) {
   if (!Array.isArray(f) || !f.length || f.length > MAX_FILES) return null
   const out = []
@@ -138,8 +156,11 @@ function validMsg (m) {
     return isId(m.target) && typeof m.chName === 'string' && !!cleanChannel(m.chName) && typeof m.deleted === 'boolean'
   }
   if (m.kind === 'key') return isHex(m.pk, 64)
+  if (m.kind === 'edit' || m.kind === 'del') return isId(m.target)
   // Profile picture of the author / picture of the room: { pic: file ref or null }, newest wins.
-  if (m.kind === 'profile' || m.kind === 'roompic') return m.pic === null || !!cleanFiles([m.pic])
+  if (m.kind === 'profile' || m.kind === 'roompic') {
+    return (m.pic === null || !!cleanFiles([m.pic])) && (m.info === undefined || !!cleanInfo(m.info))
+  }
   if (m.kind === 'dm') {
     return isHex(m.from, 64) && typeof m.toName === 'string' && m.toName.length > 0 && m.toName.length <= 40 &&
       validBoxes(m.boxes)
@@ -184,22 +205,49 @@ function createCore ({ fs, dataDir, emit }) {
       if (!validMsg(m) || seen.has(m.id)) continue
       seen.add(m.id)
       const e = { id: m.id, name: m.name.slice(0, 40), text: m.text, ts: m.ts }
+      if (m.deleted === true && !m.kind) { e.text = ''; e.deleted = true } // tombstone from a peer
       if (m.parent) e.parent = m.parent
       if (m.ch) e.ch = m.ch
-      if (m.files) e.files = cleanFiles(m.files)
+      if (m.files && !e.deleted) e.files = cleanFiles(m.files)
+      if (m.kind === 'edit' || m.kind === 'del') Object.assign(e, { kind: m.kind, target: m.target })
       if (m.kind === 'react') Object.assign(e, { kind: 'react', target: m.target, emoji: m.emoji, on: m.on })
       if (m.kind === 'chan') Object.assign(e, { kind: 'chan', target: m.target, chName: cleanChannel(m.chName), deleted: m.deleted })
       if (m.kind === 'key') Object.assign(e, { kind: 'key', pk: m.pk })
       if (m.kind === 'profile' || m.kind === 'roompic') Object.assign(e, { kind: m.kind, pic: m.pic ? cleanFiles([m.pic])[0] : null })
+      if (m.kind === 'profile' && m.info) e.info = cleanInfo(m.info)
       if (m.kind === 'dm') Object.assign(e, { kind: 'dm', toName: m.toName.slice(0, 40), from: m.from, boxes: m.boxes })
       history.push(e)
       added = true
     }
+    if (added) applyDeletes()
     if (added) {
       history.sort((a, b) => a.ts - b.ts)
       saveHistory()
     }
     return added
+  }
+
+  // Wipe messages their authors deleted (and the edits of them). Only the author's own 'del' counts.
+  function applyDeletes () {
+    const dels = new Map()
+    for (const h of history) if (h.kind === 'del') dels.set(h.target + '\n' + h.name, true)
+    if (!dels.size) return
+    const byId = new Map(history.map(h => [h.id, h]))
+    for (const h of history) {
+      const isTarget = !h.kind && !h.deleted && dels.has(h.id + '\n' + h.name)
+      const isEditOf = h.kind === 'edit' && h.text && dels.has(h.target + '\n' + h.name)
+      if (isTarget) {
+        for (const f of h.files || []) { if (!stillUsed(f.h, h.id, byId)) { try { fs.unlinkSync(blobPath(f.h)) } catch {} } }
+        h.text = ''
+        delete h.files
+        h.deleted = true
+      } else if (isEditOf) {
+        h.text = ''
+      }
+    }
+  }
+  function stillUsed (hash, exceptId) {
+    return history.some(h => h.id !== exceptId && !h.deleted && (h.files || []).some(f => f.h === hash))
   }
 
   // Room name: renames are shared as { name, ts, by }, newest wins. The secret
@@ -394,28 +442,43 @@ function createCore ({ fs, dataDir, emit }) {
       if (!sodium.crypto_box_open_easy(out, c, b4a.from(box.n, 'hex'), b4a.from(m.from, 'hex'), getIdentity().sk)) return null
       const peer = m.name === me.name ? m.toName : m.name
       let text = b4a.toString(out)
-      let files
+      let files, edit, del
       if (text.startsWith('{"yap":1')) {
-        try { const o = JSON.parse(text); text = String(o.t || ''); files = o.f ? cleanFiles(o.f) : undefined } catch {}
+        try {
+          const o = JSON.parse(text)
+          text = String(o.t || '')
+          files = o.f ? cleanFiles(o.f) : undefined
+          if (isId(o.edit)) edit = o.edit
+          if (isId(o.del)) del = o.del
+        } catch {}
       }
       const v = { id: m.id, name: m.name, ts: m.ts, kind: 'dm', peer, text }
       if (files) v.files = files
+      if (edit) v.edit = edit
+      if (del) v.del = del
       return v
     } catch { return null }
   }
   const views = list => list.map(view).filter(Boolean)
   const emitHistory = () => emit('history', views(history))
 
-  function sendDm (toName, text, files) {
+  // extra = { edit: id } or { del: id } to change one of your earlier DMs.
+  function sendDm (toName, text, files, extra) {
     text = String(text || '').slice(0, MAX_TEXT)
     toName = String(toName).slice(0, 40)
     files = files ? cleanFiles(files) : null
-    if (!me || (!text.trim() && !files) || !toName) return null
+    const edit = extra && isId(extra.edit) ? extra.edit : null
+    const del = extra && isId(extra.del) ? extra.del : null
+    if (!me || (!text.trim() && !files && !del) || !toName) return null
     const theirs = keysOf(toName)
     if (!theirs.size) return { error: toName + ' needs to update YapApp before you can send them direct messages.' }
     const pks = new Set([...theirs, ...keysOf(me.name), myPk()])
     if (pks.size > MAX_BOXES) return { error: 'Too many devices to send to.' }
-    const msg = b4a.from(files ? JSON.stringify({ yap: 1, t: text, f: files }) : text)
+    const payload = { yap: 1, t: text }
+    if (files) payload.f = files
+    if (edit) payload.edit = edit
+    if (del) payload.del = del
+    const msg = b4a.from(files || edit || del ? JSON.stringify(payload) : text)
     const boxes = {}
     for (const pk of pks) {
       const n = randomBytes(sodium.crypto_box_NONCEBYTES)
@@ -545,6 +608,19 @@ function createCore ({ fs, dataDir, emit }) {
     return publish(m)
   }
 
+  // Edit / delete one of your own channel messages (others ignore it if it isn't yours).
+  function editMessage (target, text) {
+    text = String(text || '').slice(0, MAX_TEXT)
+    if (!me || !isId(target) || !text.trim()) return null
+    return publish({ id: newId(), name: me.name, ts: Date.now(), kind: 'edit', target, text })
+  }
+  function deleteMessage (target) {
+    if (!me || !isId(target)) return null
+    const m = publish({ id: newId(), name: me.name, ts: Date.now(), kind: 'del', target, text: '' })
+    saveHistory()
+    return m
+  }
+
   // Create (new id), rename or delete a channel. Everyone in the room can.
   function setChannel (target, chName, deleted) {
     chName = cleanChannel(chName)
@@ -556,11 +632,14 @@ function createCore ({ fs, dataDir, emit }) {
   function createChannel (chName) { return setChannel(newId(), chName, false) }
 
   // Pictures: pic = a file ref from addFile (an image) or null to remove.
-  function setPicture (kind, pic) {
+  // info (profile only) = { title, pronouns, email, phone, location, about } - the whole profile each time.
+  function setPicture (kind, pic, info) {
     if (!me || (kind !== 'profile' && kind !== 'roompic')) return null
     const ref = pic ? (cleanFiles([pic]) || [])[0] : null
     if (pic && !ref) return null
-    return publish({ id: newId(), name: me.name, text: '', ts: Date.now(), kind, pic: ref })
+    const m = { id: newId(), name: me.name, text: '', ts: Date.now(), kind, pic: ref }
+    if (kind === 'profile') { const i = cleanInfo(info); if (!i) return null; m.info = i }
+    return publish(m)
   }
 
   function react (target, emoji, on) {
@@ -588,7 +667,7 @@ function createCore ({ fs, dataDir, emit }) {
     for (const k of SETTINGS_KEYS) {
       if (!changes || !(k in changes)) continue
       if (changes[k] === null) delete s[k]
-      else s[k] = String(changes[k]).slice(0, k === 'rooms' ? 40000 : 1000)
+      else s[k] = String(changes[k]).slice(0, k === 'rooms' ? 40000 : k === 'profile' ? 4000 : 1000)
     }
     writeJSON('settings.json', s)
   }
@@ -614,7 +693,7 @@ function createCore ({ fs, dataDir, emit }) {
     }
   }
 
-  return { join, leave, send, sendDm, addFile, getFile, setPicture, react, setChannel, createChannel, renameRoom, createInvite: makeInvite, checkInvite, getSettings, setSettings, debugInfo }
+  return { join, leave, send, sendDm, editMessage, deleteMessage, addFile, getFile, setPicture, react, setChannel, createChannel, renameRoom, createInvite: makeInvite, checkInvite, getSettings, setSettings, debugInfo }
 }
 
 module.exports = { createCore, parseInvite, makeInvite, hmacSha256, hkdf32 }

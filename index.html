@@ -209,6 +209,53 @@
   #popMenu button { background: none; color: var(--text); text-align: left; font-weight: 500; padding: 7px 12px; border-radius: 6px; }
   #popMenu button:hover { background: var(--hover); filter: none; }
 
+  /* Profile card + edit dialog */
+  .modal { position: fixed; inset: 0; z-index: 45; background: rgba(0,0,0,.6); display: flex; align-items: center;
+    justify-content: center; padding: 12px; }
+  .modal.hidden { display: none; }
+  .modal .card { background: var(--panel); border: 1px solid var(--line); border-radius: 14px; width: 380px;
+    max-width: 100%; max-height: calc(100vh - 24px); overflow-y: auto; padding: 18px 20px; display: flex;
+    flex-direction: column; gap: 8px; box-shadow: 0 10px 40px rgba(0,0,0,.5); }
+  .modal .card > * { flex: none; } /* scroll the card instead of squashing fields */
+  #pfAbout { min-height: 70px; }
+  .cardHead { display: flex; align-items: center; justify-content: space-between; }
+  .cardHead h2 { margin: 0; font-size: 18px; }
+  .avatar.huge { width: 112px; height: 112px; border-radius: 18px; font-size: 48px; }
+  .profileTop { display: flex; flex-direction: column; align-items: center; text-align: center; gap: 4px; margin-top: -4px; }
+  .profileTop h2 { margin: 8px 0 0; font-size: 22px; }
+  .profileTop .sub { color: var(--muted); font-size: 14px; }
+  .profileTop .status { display: flex; align-items: center; gap: 6px; font-size: 13px; color: var(--muted); }
+  .profileTop .status::before { content: ""; width: 9px; height: 9px; border-radius: 50%; background: var(--muted); }
+  .profileTop .status.on::before { background: var(--online); }
+  .fields { display: flex; flex-direction: column; gap: 10px; margin: 8px 0 4px; }
+  .field { display: flex; align-items: flex-start; gap: 8px; }
+  .field .k { color: var(--muted); font-size: 12px; text-transform: uppercase; letter-spacing: .04em; }
+  .field .v { word-break: break-word; white-space: pre-wrap; user-select: text; }
+  .field > div { flex: 1; min-width: 0; }
+  .field button { padding: 3px 10px; font-size: 12px; }
+  .cardBtns { display: flex; gap: 8px; justify-content: flex-end; margin-top: 6px; }
+  .cardBtns.wide button { flex: 1; }
+  .empty-profile { color: var(--muted); font-size: 13px; text-align: center; }
+  .picRow { display: flex; align-items: center; gap: 14px; margin-bottom: 4px; }
+  .picRow .avatar { width: 72px; height: 72px; border-radius: 14px; font-size: 30px; }
+  .picBtns { display: flex; flex-direction: column; gap: 6px; }
+  .picBtns button { padding: 5px 12px; font-size: 13px; }
+  #editProfileForm textarea { resize: vertical; }
+  #editProfileForm .note { color: var(--muted); font-size: 12px; margin: 2px 0 0; }
+  .clickable { cursor: pointer; }
+  .msg .name.clickable:hover { text-decoration: underline; }
+
+  /* Edit / delete */
+  .text .edited { color: var(--muted); font-size: 12px; }
+  .text.gone { color: var(--muted); font-style: italic; }
+  .editBox { margin: 2px 0 4px; }
+  .editBox textarea { resize: vertical; min-height: 44px; }
+  .editRow, .delBox { display: flex; align-items: center; gap: 8px; margin-top: 6px; font-size: 12px; color: var(--muted); }
+  .editRow span, .delBox span { flex: 1; }
+  .editRow button, .delBox button { padding: 4px 12px; font-size: 13px; }
+  .delBox { background: #3a1c20; border: 1px solid #5a2a30; border-radius: 8px; padding: 6px 8px; color: var(--text); }
+  button.danger { background: #d9534f; }
+
   /* Custom emojis */
   img.cemoji { width: 1.35em; height: 1.35em; vertical-align: -0.3em; object-fit: contain; }
   .text.jumbo img.cemoji { width: 2.8em; height: 2.8em; vertical-align: middle; }
@@ -360,6 +407,26 @@
   <img id="viewerImg" alt="">
 </div>
 
+<div id="profileModal" class="modal hidden"><div class="card" id="profileCard"></div></div>
+
+<div id="editProfileModal" class="modal hidden">
+  <form class="card" id="editProfileForm" autocomplete="off">
+    <div class="cardHead"><h2>Edit your profile</h2>
+      <button type="button" class="iconBtn" id="editProfileClose" title="Close"><svg class="i"><use href="#i-x"/></svg></button></div>
+    <div class="picRow"><div id="editPic"></div>
+      <div class="picBtns"><button type="button" class="ghost" id="editPicChange">Change picture</button>
+        <button type="button" class="ghost" id="editPicRemove">Remove</button></div></div>
+    <label for="pfTitle">What I do</label><input id="pfTitle" maxlength="80" placeholder="e.g. Game artist, student…">
+    <label for="pfPronouns">Pronouns</label><input id="pfPronouns" maxlength="30" placeholder="optional">
+    <label for="pfEmail">Email</label><input id="pfEmail" type="email" maxlength="120" placeholder="optional">
+    <label for="pfPhone">Phone</label><input id="pfPhone" maxlength="40" placeholder="optional">
+    <label for="pfLocation">Location</label><input id="pfLocation" maxlength="80" placeholder="optional">
+    <label for="pfAbout">About me</label><textarea id="pfAbout" maxlength="600" rows="3" placeholder="optional"></textarea>
+    <p class="note">Everyone in your rooms can see this.</p>
+    <div class="cardBtns"><button type="button" class="ghost" id="editProfileCancel">Cancel</button><button type="submit">Save</button></div>
+  </form>
+</div>
+
 <section id="chat" class="hidden">
   <aside>
     <nav id="rail">
@@ -374,7 +441,7 @@
         <div class="title">
           <b id="roomName" title="Click to rename the room"></b>
           <input id="roomRenameInput" class="hidden" maxlength="40" autocomplete="off">
-          <small id="meLabel" title="Change your profile picture"></small>
+          <small id="meLabel" title="Your profile"></small>
         </div>
       </div>
       <div class="side">
@@ -588,6 +655,13 @@
   const reacts = new Map()   // target id -> Map(emoji -> Map(name -> { on, ts }))
   const replies = new Map()  // parent id -> [reply]
   let openThread = null      // parent id shown in the thread panel
+  const edits = new Map()    // 'id\nauthor' -> { text, ts }   (only the author's own edits count)
+  const dels = new Set()     // 'id\nauthor'
+  const isDeleted = m => !!m.deleted || dels.has(m.id + '\n' + m.name)
+  const textOf = m => { const e = edits.get(m.id + '\n' + m.name); return e ? e.text : m.text }
+  const isEdited = m => edits.has(m.id + '\n' + m.name)
+  const isChange = m => m.kind === 'edit' || m.kind === 'del' || (m.kind === 'dm' && (m.edit || m.del))
+  const liveReplies = id => (replies.get(id) || []).filter(r => !isDeleted(r))
   const GENERAL = 'general'
   const channels = new Map() // channel id -> { name, ts, deleted }
   let currentCh = GENERAL
@@ -603,11 +677,20 @@
 
   // Record a history entry in the maps. Returns false for duplicates / stale toggles.
   function ingest (m) {
+    if (isChange(m)) {
+      const target = m.kind === 'dm' ? (m.edit || m.del) : m.target
+      const key = target + '\n' + m.name
+      if (m.kind === 'del' || m.del) { if (dels.has(key)) return false; dels.add(key); return true }
+      const prev = edits.get(key)
+      if (prev && prev.ts >= m.ts) return false
+      edits.set(key, { text: m.text, ts: m.ts })
+      return true
+    }
     if (m.kind === 'key') { people.add(m.name); return true }
     if (m.kind === 'profile') {
       const prev = profiles.get(m.name)
       if (prev && prev.ts >= m.ts) return false
-      profiles.set(m.name, { pic: m.pic, ts: m.ts })
+      profiles.set(m.name, { pic: m.pic, info: m.info || {}, ts: m.ts })
       return true
     }
     if (m.kind === 'roompic') {
@@ -717,7 +800,7 @@
     }
     const th = el.querySelector('.threadLink')
     if (!th) return
-    const reps = replies.get(id) || []
+    const reps = liveReplies(id)
     th.innerHTML = ''
     th.classList.toggle('hidden', !reps.length)
     if (!reps.length) return
@@ -744,18 +827,28 @@
       const st = document.createElement('div'); st.className = 'stamp'; st.textContent = timeOf(m.ts)
       gutter.append(st)
     } else {
-      gutter.append(avatar(m.name))
+      const av = avatar(m.name)
+      av.classList.add('clickable')
+      av.addEventListener('click', e => { e.stopPropagation(); openProfile(m.name) })
+      gutter.append(av)
       const head = document.createElement('div'); head.className = 'head'
-      const n = document.createElement('span'); n.className = 'name'; n.textContent = m.name
+      const n = document.createElement('span'); n.className = 'name clickable'; n.textContent = m.name
+      n.addEventListener('click', e => { e.stopPropagation(); openProfile(m.name) })
       const t = document.createElement('span'); t.className = 'time'; t.textContent = timeOf(m.ts)
       t.title = new Date(m.ts).toLocaleString()
       head.append(n, t)
       body.append(head)
     }
-    const text = document.createElement('div'); text.className = 'text'; richText(text, m.text)
+    const text = document.createElement('div'); text.className = 'text'
+    const gone = isDeleted(m)
+    if (gone) { text.classList.add('gone'); text.textContent = 'This message was deleted.' }
+    else {
+      richText(text, textOf(m))
+      if (isEdited(m)) { const e = document.createElement('span'); e.className = 'edited'; e.textContent = ' (edited)'; text.append(e) }
+    }
     const rx = document.createElement('div'); rx.className = 'reactions'
     body.append(text)
-    if (m.files) body.append(filesEl(m.files))
+    if (m.files && !gone) body.append(filesEl(m.files))
     body.append(rx)
     const threads = !opts.thread && m.kind !== 'dm'
     if (threads) {
@@ -765,6 +858,7 @@
     }
     // Hover toolbar (tap the message on phones).
     const bar = document.createElement('div'); bar.className = 'actions'
+    if (gone) bar.classList.add('hidden')
     const rb = iconBtn('iconBtn reactBtn', 'Add reaction', '#i-smile')
     rb.addEventListener('click', e => { e.stopPropagation(); openPicker(m.id, rb) })
     bar.append(rb)
@@ -772,6 +866,13 @@
       const tb = iconBtn('iconBtn', 'Reply in thread', '#i-thread')
       tb.addEventListener('click', e => { e.stopPropagation(); showThread(m.id) })
       bar.append(tb)
+    }
+    if (m.name === myName && !gone) {
+      const eb = iconBtn('iconBtn', 'Edit message', '#i-edit')
+      eb.addEventListener('click', e => { e.stopPropagation(); startEdit(div, m) })
+      const db = iconBtn('iconBtn', 'Delete message', '#i-trash')
+      db.addEventListener('click', e => { e.stopPropagation(); confirmDeleteMsg(div, m) })
+      bar.append(eb, db)
     }
     div.append(gutter, body, bar)
     div.addEventListener('click', e => {
@@ -782,6 +883,70 @@
     })
     renderExtras(div)
     return div
+  }
+
+  // Re-draw every row showing message `id` after an edit or delete.
+  function refreshMsg (id) {
+    const m = byId.get(id)
+    if (!m) return
+    if (m.parent) { refresh(m.parent); if (openThread === m.parent) renderThread(false) }
+    if (openThread === id) renderThread(false)
+    document.querySelectorAll(`#messages .msg[data-id="${id}"]`).forEach(el => {
+      if (isDeleted(m) && !liveReplies(id).length) { el.remove(); return }
+      el.replaceWith(msgEl(m, { grouped: !el.classList.contains('first') }))
+    })
+  }
+
+  async function changeMsg (m, change) {
+    let res
+    if (m.kind === 'dm') res = await chat.sendDm(m.peer, change.text || '', null, change.del ? { del: m.id } : { edit: m.id })
+    else res = change.del ? await chat.deleteMessage(m.id) : await chat.editMessage(m.id, change.text)
+    if (res && res.error) addSys(res.error)
+    else if (res) addMsg(res)
+  }
+
+  function startEdit (div, m) {
+    const text = div.querySelector('.text')
+    if (!text || div.querySelector('.editBox')) return
+    const box = document.createElement('div'); box.className = 'editBox'
+    const ta = document.createElement('textarea'); ta.value = textOf(m); ta.rows = 2
+    const row = document.createElement('div'); row.className = 'editRow'
+    const hint = document.createElement('span'); hint.textContent = IS_PHONE ? '' : 'Enter to save · Esc to cancel'
+    const cancel = document.createElement('button'); cancel.type = 'button'; cancel.className = 'ghost'; cancel.textContent = 'Cancel'
+    const save = document.createElement('button'); save.type = 'button'; save.textContent = 'Save'
+    row.append(hint, cancel, save)
+    box.append(ta, row)
+    text.replaceWith(box)
+    const close = () => box.replaceWith(text)
+    const done = () => {
+      const v = ta.value
+      if (!v.trim() && !m.files) { close(); confirmDeleteMsg(div, m); return }
+      close()
+      if (v !== textOf(m)) changeMsg(m, { text: v })
+    }
+    cancel.addEventListener('click', e => { e.stopPropagation(); close() })
+    save.addEventListener('click', e => { e.stopPropagation(); done() })
+    ta.addEventListener('click', e => e.stopPropagation())
+    ta.addEventListener('keydown', e => {
+      if (e.key === 'Escape') { e.preventDefault(); close() }
+      if (e.key === 'Enter' && !e.shiftKey && !IS_PHONE) { e.preventDefault(); done() }
+    })
+    ta.focus()
+    ta.selectionStart = ta.selectionEnd = ta.value.length
+    box.scrollIntoView({ block: 'nearest' })
+  }
+
+  function confirmDeleteMsg (div, m) {
+    if (div.querySelector('.delBox')) return
+    const box = document.createElement('div'); box.className = 'delBox'
+    const t = document.createElement('span'); t.textContent = 'Delete this message for everyone?'
+    const no = document.createElement('button'); no.type = 'button'; no.className = 'ghost'; no.textContent = 'Cancel'
+    const yes = document.createElement('button'); yes.type = 'button'; yes.className = 'danger'; yes.textContent = 'Delete'
+    box.append(t, no, yes)
+    div.querySelector('.body').append(box)
+    box.scrollIntoView({ block: 'nearest' })
+    no.addEventListener('click', e => { e.stopPropagation(); box.remove() })
+    yes.addEventListener('click', e => { e.stopPropagation(); box.remove(); changeMsg(m, { del: true }) })
   }
 
   // Append a normal message to the main list.
@@ -804,6 +969,7 @@
   function addMsg (m, forceScroll) {
     if (!ingest(m)) return
     entries.push(m)
+    if (isChange(m)) { refreshMsg(m.kind === 'dm' ? (m.edit || m.del) : m.target); return }
     if (m.kind === 'key') { renderPeople(); return }
     if (m.kind === 'profile' || m.kind === 'roompic') { rememberRoomPic(); refreshPictures(); return }
     if (m.kind === 'chan') {
@@ -836,6 +1002,7 @@
   function renderHistory (list) {
     entries = list.slice()
     byId.clear(); reacts.clear(); replies.clear(); resetChannels(); people.clear(); profiles.clear()
+    edits.clear(); dels.clear()
     roomPic = { pic: null, ts: 0 }
     for (const m of list) ingest(m)
     if (!isDm(currentCh)) {
@@ -847,7 +1014,6 @@
     renderMain()
     rememberRoomPic()
     renderRoomPic()
-    syncMyPicture()
   }
 
   // Keep the room's picture in the saved room list too, for the icon rail.
@@ -863,7 +1029,8 @@
     showChannelHeader()
     messagesEl.innerHTML = ''
     last = null
-    const top = entries.filter(m => (!m.kind || m.kind === 'dm') && !m.parent && chOf(m) === currentCh)
+    const top = entries.filter(m => (!m.kind || (m.kind === 'dm' && !isChange(m))) && !m.parent &&
+      chOf(m) === currentCh && (!isDeleted(m) || liveReplies(m.id).length))
     if (!top.length) {
       const e = document.createElement('div')
       e.className = 'empty'
@@ -1000,7 +1167,7 @@
     const keep = !stick && box.scrollHeight - box.scrollTop - box.clientHeight > 80 ? box.scrollTop : null
     box.innerHTML = ''
     box.append(msgEl(parent, { thread: true }))
-    const reps = replies.get(openThread) || []
+    const reps = liveReplies(openThread)
     const d = document.createElement('div'); d.className = 'replyCount'
     const s = document.createElement('span')
     s.textContent = reps.length ? (reps.length === 1 ? '1 reply' : reps.length + ' replies') : 'No replies yet'
@@ -1053,7 +1220,9 @@
       if (you) { const y = document.createElement('span'); y.className = 'you'; y.textContent = 'you'; l.append(y) }
       div.append(p, l)
       if (!you) div.addEventListener('click', () => switchChannel(id))
-      else { div.style.cursor = 'pointer'; div.title = 'Change your profile picture'; div.addEventListener('click', e => { e.stopPropagation(); pictureMenu(div, 'profile') }) }
+      else { div.style.cursor = 'pointer'; div.title = 'Your profile'; div.addEventListener('click', e => { e.stopPropagation(); openProfile(myName) }) }
+      p.classList.add('clickable')
+      p.addEventListener('click', e => { e.stopPropagation(); openProfile(name) })
       box.append(div)
     }
     if (myName) row(myName, true)
@@ -1110,6 +1279,7 @@
     const m = await chat.setChannel(currentCh, v, false)
     if (m) addMsg(m)
   }, () => !isDm(currentCh))
+  $('roomLabel').addEventListener('click', () => { if (isDm(currentCh)) openProfile(currentCh.slice(3)) })
   inlineEdit($('roomName'), $('roomRenameInput'), () => $('roomName').textContent, async v => {
     const info = await chat.renameRoom(v)
     if (info) showRoom(info)
@@ -1139,6 +1309,7 @@
     $('join').classList.add('hidden')
     $('chat').classList.remove('hidden')
     renderPeers([])
+    syncMyProfile()
     messagesEl.scrollTop = messagesEl.scrollHeight // history arrived while the chat was still hidden
     if (!IS_PHONE) $('input').focus()
     return true
@@ -1629,31 +1800,145 @@
     })
   }
 
+  // Your profile (picture + details) is remembered in settings so it follows you into every room.
+  // Newest wins: if you changed it on another device, that version is adopted here too.
+  function myProfile () {
+    try {
+      const p = JSON.parse(load('profile') || 'null')
+      if (p) return { pic: p.pic || null, info: p.info || {}, ts: p.ts || 0 }
+    } catch {}
+    let pic = null
+    try { pic = JSON.parse(load('pfp') || 'null') } catch {} // older versions kept only the picture
+    return { pic, info: {}, ts: 0 }
+  }
+  const sameProfile = (a, b) => ((a.pic && a.pic.h) || null) === ((b.pic && b.pic.h) || null) &&
+    ['title', 'pronouns', 'email', 'phone', 'location', 'about'].every(k => ((a.info || {})[k] || '') === ((b.info || {})[k] || ''))
+  async function publishProfile (p) {
+    const m = await chat.setPicture('profile', p.pic, p.info)
+    store('profile', JSON.stringify({ pic: p.pic, info: p.info, ts: m ? m.ts : Date.now() }))
+    if (m) addMsg(m)
+  }
+  async function syncMyProfile () {
+    if (!myName) return
+    const mine = myProfile()
+    const cur = profiles.get(myName)
+    if (cur && cur.ts > mine.ts) { // newer one from your other device
+      store('profile', JSON.stringify({ pic: cur.pic, info: cur.info, ts: cur.ts }))
+      return
+    }
+    if (!mine.pic && !Object.keys(mine.info).length) return
+    if (!cur || !sameProfile(cur, mine)) await publishProfile(mine)
+  }
+
   async function changePicture (kind) {
     const bytes = await pickImage()
     if (!bytes) return
     const ref = await chat.addFile(bytes, kind === 'profile' ? 'profile.jpg' : 'room.jpg', 'image/jpeg')
     if (!ref || ref.error) { addSys('Could not use that picture.'); return }
+    if (kind === 'profile') { await publishProfile({ ...myProfile(), pic: ref }); return }
     const m = await chat.setPicture(kind, ref)
-    if (kind === 'profile') store('pfp', JSON.stringify(ref)) // follows you into every room
     if (m) addMsg(m)
   }
   async function removePicture (kind) {
+    if (kind === 'profile') { await publishProfile({ ...myProfile(), pic: null }); return }
     const m = await chat.setPicture(kind, null)
-    if (kind === 'profile') forget('pfp')
     if (m) addMsg(m)
   }
 
-  // After joining: make sure this room shows the picture you chose (maybe in another room).
-  async function syncMyPicture () {
-    let mine = null
-    try { mine = JSON.parse(load('pfp') || 'null') } catch {}
-    const cur = profiles.get(myName)
-    if (mine && (!cur || !cur.pic || cur.pic.h !== mine.h)) {
-      const m = await chat.setPicture('profile', mine)
-      if (m) addMsg(m)
+  // ---- Profile card (click someone's picture or name) and the edit dialog
+  const FIELD_LABELS = [['email', 'Email', true], ['phone', 'Phone', true], ['location', 'Location'], ['about', 'About']]
+  let profileFor = null
+  function openProfile (name) {
+    profileFor = name
+    closePicker(); closeEmojiPanel(); menu.classList.add('hidden')
+    const you = name === myName
+    const p = profiles.get(name) || { pic: null, info: {} }
+    const info = p.info || {}
+    const card = $('profileCard')
+    card.innerHTML = ''
+    const head = document.createElement('div'); head.className = 'cardHead'
+    head.append(document.createElement('span'))
+    const x = iconBtn('iconBtn', 'Close', '#i-x'); x.addEventListener('click', closeProfile); head.append(x)
+    const top = document.createElement('div'); top.className = 'profileTop'
+    top.append(avatar(name, 'huge'))
+    const h = document.createElement('h2'); h.textContent = name
+    top.append(h)
+    const sub = [info.title, info.pronouns].filter(Boolean).join(' · ')
+    if (sub) { const d = document.createElement('div'); d.className = 'sub'; d.textContent = sub; top.append(d) }
+    const on = you || online.includes(name)
+    const st = document.createElement('div'); st.className = 'status' + (on ? ' on' : ''); st.textContent = on ? 'Online' : 'Offline'
+    top.append(st)
+    card.append(head, top)
+    const fields = document.createElement('div'); fields.className = 'fields'
+    for (const [k, label, copy] of FIELD_LABELS) {
+      if (!info[k]) continue
+      const f = document.createElement('div'); f.className = 'field'
+      const box = document.createElement('div')
+      const kk = document.createElement('div'); kk.className = 'k'; kk.textContent = label
+      const vv = document.createElement('div'); vv.className = 'v'; vv.textContent = info[k]
+      box.append(kk, vv)
+      f.append(box)
+      if (copy) {
+        const b = document.createElement('button'); b.type = 'button'; b.className = 'ghost'; b.textContent = 'Copy'
+        b.addEventListener('click', async () => { await chat.copy(info[k]); b.textContent = 'Copied!'; setTimeout(() => { b.textContent = 'Copy' }, 1500) })
+        f.append(b)
+      }
+      fields.append(f)
     }
+    if (fields.children.length) card.append(fields)
+    else {
+      const e = document.createElement('div'); e.className = 'empty-profile'
+      e.textContent = you ? 'Add what you do, your email and more so people know who you are.' : name + " hasn't filled in a profile yet."
+      card.append(e)
+    }
+    const btns = document.createElement('div'); btns.className = 'cardBtns wide'
+    const b = document.createElement('button'); b.type = 'button'
+    if (you) {
+      b.textContent = 'Edit profile'
+      b.addEventListener('click', () => { closeProfile(); openEditProfile() })
+    } else {
+      b.textContent = 'Message'
+      b.disabled = !people.has(name)
+      if (b.disabled) b.title = name + ' needs to update YapApp for direct messages'
+      b.addEventListener('click', () => { closeProfile(); switchChannel('dm:' + name) })
+    }
+    btns.append(b)
+    card.append(btns)
+    $('profileModal').classList.remove('hidden')
   }
+  function closeProfile () { $('profileModal').classList.add('hidden'); profileFor = null }
+  $('profileModal').addEventListener('click', e => { if (e.target.id === 'profileModal') closeProfile() })
+
+  const PF = { title: 'pfTitle', pronouns: 'pfPronouns', email: 'pfEmail', phone: 'pfPhone', location: 'pfLocation', about: 'pfAbout' }
+  function renderEditPic () {
+    const box = $('editPic'); box.innerHTML = ''
+    const p = profiles.get(myName) || myProfile()
+    box.append(picAvatar(myName, p.pic))
+    $('editPicRemove').classList.toggle('hidden', !p.pic)
+  }
+  function openEditProfile () {
+    const p = profiles.get(myName) || myProfile()
+    for (const [k, id] of Object.entries(PF)) $(id).value = (p.info || {})[k] || ''
+    renderEditPic()
+    $('editProfileModal').classList.remove('hidden')
+    if (!IS_PHONE) $('pfTitle').focus()
+  }
+  function closeEditProfile () { $('editProfileModal').classList.add('hidden') }
+  $('editProfileClose').addEventListener('click', closeEditProfile)
+  $('editProfileCancel').addEventListener('click', closeEditProfile)
+  $('editProfileModal').addEventListener('click', e => { if (e.target.id === 'editProfileModal') closeEditProfile() })
+  $('editPicChange').addEventListener('click', async () => { await changePicture('profile'); renderEditPic() })
+  $('editPicRemove').addEventListener('click', async () => { await removePicture('profile'); renderEditPic() })
+  $('editProfileForm').addEventListener('submit', async e => {
+    e.preventDefault()
+    const info = {}
+    for (const [k, id] of Object.entries(PF)) { const v = $(id).value.trim(); if (v) info[k] = v }
+    const cur = profiles.get(myName) || myProfile()
+    closeEditProfile()
+    await publishProfile({ pic: cur.pic || null, info })
+    openProfile(myName)
+  })
+  document.addEventListener('keydown', e => { if (e.key === 'Escape') { closeProfile(); closeEditProfile() } })
 
   // Small popup menu (change / remove picture).
   const menu = document.createElement('div')
@@ -1682,10 +1967,11 @@
     openMenu(anchor, items)
   }
   $('roomPicBtn').addEventListener('click', e => { e.stopPropagation(); pictureMenu($('roomPicBtn'), 'roompic') })
-  $('meLabel').addEventListener('click', e => { e.stopPropagation(); pictureMenu($('meLabel'), 'profile') })
+  $('meLabel').addEventListener('click', e => { e.stopPropagation(); openProfile(myName) })
 
   // Re-draw everything that shows pictures.
   function refreshPictures () {
+    if (profileFor && !$('profileModal').classList.contains('hidden')) openProfile(profileFor)
     renderRoomPic()
     renderRooms()
     renderPeers(online) // sidebar people + header faces

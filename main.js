@@ -25,10 +25,12 @@ ipcMain.handle('settings:set', (e, changes) => getCore().setSettings(changes))
 ipcMain.handle('join', (e, name, invite) => getCore().join(name, invite))
 ipcMain.handle('leave', () => getCore().leave())
 ipcMain.handle('send', (e, text, extra) => getCore().send(text, extra))
-ipcMain.handle('dm', (e, toName, text, files) => getCore().sendDm(toName, text, files))
+ipcMain.handle('dm', (e, toName, text, files, extra) => getCore().sendDm(toName, text, files, extra))
+ipcMain.handle('msg:edit', (e, target, text) => getCore().editMessage(target, text))
+ipcMain.handle('msg:delete', (e, target) => getCore().deleteMessage(target))
 ipcMain.handle('file:add', (e, bytes, name, mime, relPath) => getCore().addFile(bytes, name, mime, relPath))
 ipcMain.handle('file:get', (e, ref) => getCore().getFile(ref))
-ipcMain.handle('picture:set', (e, kind, pic) => getCore().setPicture(kind, pic))
+ipcMain.handle('picture:set', (e, kind, pic, info) => getCore().setPicture(kind, pic, info))
 
 // Names and folder paths come from other people: keep them inside the chosen folder.
 function safeName (n) {

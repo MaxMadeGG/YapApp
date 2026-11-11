@@ -292,6 +292,7 @@ public class YapService extends Service {
     if (uiVisible || from.equals(myName)) return;
     String kind = m.optString("kind");
     if (!kind.isEmpty() && !kind.equals("dm")) return; // reactions / channel changes don't buzz the phone
+    if (m.has("edit") || m.has("del")) return;       // nor edits / deletes of DMs
     Person sender = new Person.Builder().setName(from).build();
     String body = m.optString("text", "");
     JSONArray files = m.optJSONArray("files");

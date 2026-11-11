@@ -32,7 +32,9 @@
     join: (name, invite) => call('join', name, invite),
     leave: () => call('leave'),
     send: (text, extra) => call('send', text, extra),
-    sendDm: (toName, text, files) => call('sendDm', toName, text, files),
+    sendDm: (toName, text, files, extra) => call('sendDm', toName, text, files, extra),
+    editMessage: (target, text) => call('editMessage', target, text),
+    deleteMessage: target => call('deleteMessage', target),
     // src = { path } from pickFiles() (bytes never go through the WebView).
     addFile: (src, name, mime, relPath) => {
       if (src && src.path) return call('addFileFromPath', src.path, name, mime, relPath)
@@ -40,7 +42,7 @@
       for (let i = 0; i < src.length; i += 0x8000) bin += String.fromCharCode.apply(null, src.subarray(i, i + 0x8000))
       return call('addFileB64', btoa(bin), name, mime, relPath)
     },
-    setPicture: (kind, pic) => call('setPicture', kind, pic),
+    setPicture: (kind, pic, info) => call('setPicture', kind, pic, info),
     getFile: async ref => {
       const b64 = await call('getFile', ref)
       if (!b64) return null

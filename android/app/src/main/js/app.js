@@ -39,7 +39,9 @@ const methods = {
     sendStatus()
   },
   send: (text, extra) => core.send(text, extra),
-  sendDm: (toName, text, files) => core.sendDm(toName, text, files),
+  sendDm: (toName, text, files, extra) => core.sendDm(toName, text, files, extra),
+  editMessage: (target, text) => core.editMessage(target, text),
+  deleteMessage: target => core.deleteMessage(target),
   // Files picked by the Java side are copied into <dataDir>/import first (no big strings over IPC).
   addFileFromPath: (p, name, mime, relPath) => {
     if (!String(p).startsWith(dataDir + '/import/')) throw new Error('bad path')
@@ -48,7 +50,7 @@ const methods = {
     return core.addFile(data, name, mime, relPath)
   },
   addFileB64: (b64, name, mime, relPath) => core.addFile(b64, name, mime, relPath), // small things (pictures)
-  setPicture: (kind, pic) => core.setPicture(kind, pic),
+  setPicture: (kind, pic, info) => core.setPicture(kind, pic, info),
   getFile: async ref => {
     const b = await core.getFile(ref)
     return b ? b4a.toString(b, 'base64') : null
