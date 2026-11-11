@@ -213,7 +213,7 @@
   img.cemoji { width: 1.35em; height: 1.35em; vertical-align: -0.3em; object-fit: contain; }
   .text.jumbo img.cemoji { width: 2.8em; height: 2.8em; vertical-align: middle; }
   #picker img.cemoji { width: 22px; height: 22px; vertical-align: middle; }
-  #emojiPanel .tabs img.cemoji { width: 19px; height: 19px; vertical-align: middle; }
+  #emojiPanel .tabs img.cemoji { width: 17px; height: 17px; vertical-align: middle; }
   #emojiPanel .grid img.cemoji { width: 28px; height: 28px; vertical-align: middle; }
 
   /* Emoji panel */
@@ -223,7 +223,7 @@
   #emojiPanel.hidden { display: none; }
   #emojiPanel .tabs { display: flex; justify-content: space-between; border-bottom: 1px solid var(--line); padding: 4px;
     overflow-x: auto; scrollbar-width: none; flex: none; }
-  #emojiPanel .tabs button { background: none; padding: 4px 3px; font-size: 17px; border-radius: 6px; opacity: .6; flex: none; }
+  #emojiPanel .tabs button { background: none; padding: 4px 2px; font-size: 15px; border-radius: 6px; opacity: .6; flex: none; }
   #emojiPanel .tabs button.on { background: var(--hover); opacity: 1; }
   #emojiPanel .grid { flex: 1; overflow-y: auto; padding: 6px; display: grid; grid-template-columns: repeat(8, 1fr); align-content: start; }
   #emojiPanel .grid button { background: none; padding: 4px 0; font-size: 22px; line-height: 1.2; border-radius: 6px; }
@@ -1473,6 +1473,7 @@
   // ---- Emoji panel (composer + "more reactions"). Plain lists, grouped like a phone keyboard.
   const EMOJI_SETS = [
     ['🕘', 'Recent', []],
+    ['⭐', 'Favorites', '😭 👀 🤣 :sadshit: 👍 😄 👋 😑 🙄 💩 💀 😅 🔔 🤞 ❤️ 🙂 😈 😏 ✅ 🍺 💥 🥺 😡 🤫 😴 🧵 💯 🎂 😢 🥁 🤭 🫣 😁 😀 🛠️ 🫠 🙌 🙏 ➕ 👏 💡 🎯 🎉 1️⃣ 2️⃣ 3️⃣ 📣 ⚪ 🔵 🔴'],
     [':sadshit:', 'Custom', Object.keys(CUSTOM_EMOJI).map(n => ':' + n + ':')],
     ['😀', 'Smileys', '😀 😃 😄 😁 😆 😅 🤣 😂 🙂 🙃 🫠 😉 😊 😇 🥰 😍 🤩 😘 😗 ☺️ 😚 😙 🥲 😋 😛 😜 🤪 😝 🤑 🤗 🤭 🫢 🫣 🤫 🤔 🫡 🤐 🤨 😐 😑 😶 🫥 😏 😒 🙄 😬 🤥 😌 😔 😪 🤤 😴 😷 🤒 🤕 🤢 🤮 🤧 🥵 🥶 🥴 😵 🤯 🤠 🥳 🥸 😎 🤓 🧐 😕 🫤 😟 🙁 ☹️ 😮 😯 😲 😳 🥺 🥹 😦 😧 😨 😰 😥 😢 😭 😱 😖 😣 😞 😓 😩 😫 🥱 😤 😡 😠 🤬 😈 👿 💀 ☠️ 💩 🤡 👹 👺 👻 👽 👾 🤖 😺 😸 😹 😻 😼 😽 🙀 😿 😾 🙈 🙉 🙊'],
     ['👋', 'People', '👋 🤚 🖐️ ✋ 🖖 👌 🤌 🤏 ✌️ 🤞 🫰 🤟 🤘 🤙 👈 👉 👆 🖕 👇 ☝️ 🫵 👍 👎 ✊ 👊 🤛 🤜 👏 🙌 🫶 👐 🤲 🤝 🙏 ✍️ 💅 🤳 💪 🦾 🦵 🦶 👂 👃 🧠 👀 👁️ 👅 👄 🫦 👶 🧒 👦 👧 🧑 👱 👨 🧔 👩 🧓 👴 👵 🙍 🙎 🙅 🙆 💁 🙋 🧏 🙇 🤦 🤷 👮 🕵️ 💂 🥷 👷 🤴 👸 👳 🧕 🤵 👰 🤰 🤱 👼 🎅 🤶 🦸 🦹 🧙 🧚 🧛 🧜 🧝 🧞 🧟 💆 💇 🚶 🧍 🧎 🏃 💃 🕺 👯 🧖 🧗 🤺 🏇 ⛷️ 🏂 🏌️ 🏄 🚣 🏊 ⛹️ 🏋️ 🚴 🚵 🤸 🤼 🤽 🤾 🤹 🧘 🛀 👫 👬 👭 💏 💑 👪'],
@@ -1516,7 +1517,7 @@
   emojiPanel.innerHTML = '<div class="tabs"></div><div class="grid"></div>'
   document.body.append(emojiPanel)
   let emojiPick = null
-  let emojiTab = 2 // Smileys
+  let emojiTab = 1 // Favorites
   function renderEmojiPanel () {
     const tabs = emojiPanel.querySelector('.tabs')
     const grid = emojiPanel.querySelector('.grid')
@@ -1548,7 +1549,7 @@
   function openEmojiPanel (anchor, onPick) {
     closePicker()
     emojiPick = onPick
-    if (emojiTab === 0 && !recentEmojis().length) emojiTab = 2
+    if (emojiTab === 0 && !recentEmojis().length) emojiTab = 1
     renderEmojiPanel()
     emojiPanel.classList.remove('hidden')
     const r = anchor.getBoundingClientRect()
