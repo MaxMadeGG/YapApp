@@ -380,11 +380,16 @@
   let rooms = []          // [{ invite, name }]
   let current = null      // key of the room we're in
   let myName = ''
-  const keyOf = invite => String(invite).split('-')[1] || invite
+  // The secret is always 22 base64url chars, and may itself contain '-', so don't split on '-'.
+  const keyOf = invite => (/^yap1-([A-Za-z0-9_-]{22})-/.exec(String(invite).trim()) || [])[1] || String(invite)
   function saveRooms () { store('rooms', JSON.stringify(rooms)) }
   function loadRooms () {
     try { rooms = JSON.parse(load('rooms') || '[]') } catch { rooms = [] }
     if (!Array.isArray(rooms)) rooms = []
+    // Merge duplicates (older versions mis-keyed some invites, so a renamed room showed up twice).
+    const seen = new Map()
+    for (const r of rooms) seen.set(keyOf(r.invite), r) // later entry = newer invite/name
+    if (seen.size !== rooms.length) { rooms = [...seen.values()]; saveRooms() }
     const inv = load('invite') // older versions remembered just one room
     if (inv && !rooms.some(r => keyOf(r.invite) === keyOf(inv))) rooms.push({ invite: inv, name: '' })
   }
