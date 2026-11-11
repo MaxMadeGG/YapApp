@@ -15,14 +15,20 @@ README.md has install/build details; this file is "where things stand".
 - Version 0.3.2 (CI makes rolling builds `0.3.<run number>`).
 - Verified: desktop self-update (local feed), Android on Redmi Note 9 / Android 12: chat with PC, background
   service + notifications, self-update 0.3.2 -> 0.3.99 (local feed), invite auth (good/wrong/no-auth bots).
-- NOT verified: any GitHub Actions run (repo private -> can't see it from here). Check the Actions tab first.
+- Repo is PUBLIC (2026-11-11); Actions runs 1-10 all green, rolling `latest` has win/linux 0.3.10 -> desktop
+  self-update live. Check runs with `curl https://api.github.com/repos/MaxMadeGG/YapApp/actions/runs`.
+- Android auto-rejoin after reboot (BootReceiver -> YapService ACTION_AUTOJOIN: foreground "Reconnecting…",
+  getSettings, join if login fresh) verified on the Redmi after a real reboot (2026-11-11).
 
-## Open / to do
+## Open / to do (renumber freely)
 1. User must add repo secret `ANDROID_KEYSTORE_B64` (base64 of `~/.android/debug.keystore`), else CI skips the APK.
-2. Repo must be public for self-updates (desktop + Android) and for friends to download releases.
 3. User's PC was still running an old 0.2.0 YapApp (no gossip) - install a new build.
-4. MIUI: user should enable Autostart + Battery saver "No restrictions" for YapApp.
-5. Ideas not started: auto-start after phone reboot, Enter = newline on phones, kick/ban (needs room admin
+4. MIUI: Autostart must be ON or the boot receiver is blocked ("not permitted to auto start" in logcat).
+   MIUI RESETS Autostart to off on every app update/reinstall -> so MY_PACKAGE_REPLACED rejoin never fires on
+   MIUI, and the user must re-enable Autostart after each update (or `adb shell appops set
+   com.maxmadegg.yapapp 10008 allow`). Battery saver "No restrictions" is set on the user's phone.
+5. Done 2026-11-11: auto-start after reboot, Enter = newline on phones (Send button sends).
+   Ideas not started: kick/ban (needs room admin
    design), encrypted local history.
 - Decided: keep invite-code login + 30-day expiry as is (no email verification - would need a server).
 

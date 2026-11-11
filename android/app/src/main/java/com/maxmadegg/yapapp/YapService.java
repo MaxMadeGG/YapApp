@@ -44,6 +44,9 @@ public class YapService extends Service {
   static final int NOTIF_CONN = 1;
   static final int NOTIF_MSG = 2;
   static final String ACTION_DISCONNECT = "com.maxmadegg.yapapp.DISCONNECT";
+  static final String ACTION_AUTOJOIN = "com.maxmadegg.yapapp.AUTOJOIN";
+  // Same rule as the UI (index.html SESSION_DAYS): remembered login expires after 30 days unused.
+  static final long SESSION_MS = 30L * 24 * 3600 * 1000;
 
   interface Listener { void onLine(String line); }
 
@@ -62,6 +65,7 @@ public class YapService extends Service {
   private int peerCount;
   private final List<Notification.MessagingStyle.Message> unread = new ArrayList<>();
   private int serviceRequestId = -1;
+  private int autoSettingsId, autoJoinId; // pending auto-join requests (0 = none)
 
   class LocalBinder extends Binder { YapService service() { return YapService.this; } }
   private final IBinder binder = new LocalBinder();
@@ -97,7 +101,58 @@ public class YapService extends Service {
         if (l != null) l.onLine("{\"event\":\"system\",\"data\":\"Disconnected from the notification\"}");
       });
     }
+    if (intent != null && ACTION_AUTOJOIN.equals(intent.getAction())) {
+      // Started by BootReceiver via startForegroundService: must go foreground now.
+      if (!foreground) {
+        Notification n = new Notification.Builder(this, CH_CONN)
+          .setSmallIcon(R.drawable.ic_notification)
+          .setContentTitle("Reconnecting…")
+          .setContentIntent(openAppIntent())
+          .setOngoing(true)
+          .build();
+        if (Build.VERSION.SDK_INT >= 34) {
+          startForeground(NOTIF_CONN, n, ServiceInfo.FOREGROUND_SERVICE_TYPE_REMOTE_MESSAGING);
+        } else {
+          startForeground(NOTIF_CONN, n);
+        }
+        foreground = true;
+      }
+      ipcHandler.post(() -> {
+        if (roomName != null) return; // already in a room
+        autoSettingsId = serviceRequestId--;
+        writeLine("{\"id\":" + autoSettingsId + ",\"method\":\"getSettings\",\"args\":[]}");
+      });
+    }
     return START_NOT_STICKY;
+  }
+
+  /** Response to one of our auto-join requests (IPC thread). */
+  private void onAutoJoinReply(int id, JSONObject msg) throws Exception {
+    if (id == autoSettingsId) {
+      autoSettingsId = 0;
+      JSONObject s = msg.optJSONObject("result");
+      String name = s == null ? "" : s.optString("name", "");
+      String invite = s == null ? "" : s.optString("invite", "");
+      long lastUsed = 0;
+      try { lastUsed = Long.parseLong(s == null ? "" : s.optString("lastUsed", "0")); } catch (NumberFormatException ignored) {}
+      if (!name.isEmpty() && !invite.isEmpty() && System.currentTimeMillis() - lastUsed < SESSION_MS) {
+        autoJoinId = serviceRequestId--;
+        JSONObject req = new JSONObject().put("id", autoJoinId).put("method", "join")
+          .put("args", new JSONArray().put(name).put(invite));
+        writeLine(req.toString());
+        return;
+      }
+    } else {
+      autoJoinId = 0;
+      JSONObject r = msg.optJSONObject("result");
+      if (r != null && r.optBoolean("ok")) return; // status event updates the notification
+    }
+    // No fresh login, or joining failed: nothing to keep alive.
+    if (roomName == null && foreground) {
+      stopForeground(STOP_FOREGROUND_REMOVE);
+      foreground = false;
+      if (listener == null) stopSelf();
+    }
   }
 
   @Override
@@ -167,6 +222,8 @@ public class YapService extends Service {
     try {
       JSONObject msg = new JSONObject(line);
       String event = msg.optString("event", "");
+      int id = msg.optInt("id", 0);
+      if (id != 0 && (id == autoSettingsId || id == autoJoinId)) { onAutoJoinReply(id, msg); return; }
       if (event.equals("status")) onStatus(msg.getJSONObject("data"));
       else if (event.equals("message")) onMessage(msg.getJSONObject("data"));
     } catch (Exception e) {

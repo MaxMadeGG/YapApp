@@ -369,8 +369,14 @@
   }
 
   $('composer').addEventListener('submit', e => { e.preventDefault(); sendInput() })
+  // Phones: Enter is a new line and the Send button sends (like other chat apps).
+  const IS_PHONE = !!window.YapNative
+  if (IS_PHONE) {
+    $('input').placeholder = 'Message…'
+    $('input').setAttribute('enterkeyhint', 'enter')
+  }
   $('input').addEventListener('keydown', e => {
-    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendInput() }
+    if (e.key === 'Enter' && !e.shiftKey && !IS_PHONE) { e.preventDefault(); sendInput() }
   })
 
   // Self-update: main process downloads in the background, we offer a restart.

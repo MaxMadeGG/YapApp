@@ -8,6 +8,8 @@
   <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
   <!-- self-update from GitHub releases (user confirms each install) -->
   <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
+  <!-- rejoin the remembered room after a reboot -->
+  <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
 
   <application
     android:label="YapApp"
@@ -31,5 +33,11 @@
       android:exported="false"
       android:foregroundServiceType="remoteMessaging" />
     <receiver android:name=".Updater$InstallResult" android:exported="false" />
+    <receiver android:name=".BootReceiver" android:exported="true">
+      <intent-filter>
+        <action android:name="android.intent.action.BOOT_COMPLETED" />
+        <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
+      </intent-filter>
+    </receiver>
   </application>
 </manifest>
