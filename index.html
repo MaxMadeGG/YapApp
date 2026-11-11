@@ -95,6 +95,10 @@
     border-bottom: 1px solid var(--line); font-size: 13px; }
   #updateBar { flex-direction: row; align-items: center; gap: 12px; background: #24365f; }
   #updateBar span { flex: 1; }
+  #autostartBar { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; padding: 10px 18px;
+    background: #4a3a12; border-bottom: 1px solid var(--line); font-size: 13px; }
+  #autostartBar span { flex: 1 1 100%; }
+  #autostartBar button { padding: 5px 12px; }
   #inviteBar { background: #1f3a2c; }
   #inviteBar .top { display: flex; align-items: center; gap: 10px; }
   #inviteBar .top span { flex: 1; }
@@ -275,6 +279,11 @@
       <span id="updateText"></span>
       <button id="updateBtn">Restart to update</button>
       <button class="ghost" id="updateLater">Later</button>
+    </div>
+    <div id="autostartBar" class="hidden">
+      <span>Your phone stops YapApp from reconnecting after a restart. Turn on <b>Autostart</b> for YapApp to fix it.</span>
+      <button id="autostartBtn">Open settings</button>
+      <button class="ghost" id="autostartLater">Not now</button>
     </div>
     <div id="inviteBar" class="hidden">
       <div class="top">
@@ -857,6 +866,18 @@
   }
   setupComposer($('composer'), $('input'), $('sendBtn'), () => null)
   setupComposer($('threadComposer'), $('threadInput'), $('threadSend'), () => openThread)
+
+  // ---- Xiaomi phones: nudge to turn on Autostart (needed to reconnect after a reboot).
+  let autostartSnoozed = false
+  function checkAutostart () {
+    let blocked = false
+    try { blocked = !!(window.YapNative && YapNative.autostartBlocked && YapNative.autostartBlocked()) } catch {}
+    $('autostartBar').classList.toggle('hidden', !blocked || autostartSnoozed)
+  }
+  $('autostartBtn').addEventListener('click', () => YapNative.openAutostart())
+  $('autostartLater').addEventListener('click', () => { autostartSnoozed = true; checkAutostart() })
+  document.addEventListener('visibilitychange', () => { if (!document.hidden) checkAutostart() })
+  checkAutostart()
 
   // ---- Self-update: the host downloads in the background, we offer a restart.
   chat.version().then(v => { $('version').textContent = 'v' + v })

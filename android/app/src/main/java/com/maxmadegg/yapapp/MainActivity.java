@@ -166,6 +166,34 @@ public class MainActivity extends Activity {
     @JavascriptInterface
     public void installUpdate() { updater.install(); }
 
+    /** Xiaomi/MIUI only: true when its "Autostart" switch is off for us, which blocks
+     *  BootReceiver (no reconnect after a reboot). MIUI turns it off after every update. */
+    @JavascriptInterface
+    public boolean autostartBlocked() {
+      if (!"xiaomi".equalsIgnoreCase(Build.MANUFACTURER)) return false;
+      try {
+        android.app.AppOpsManager ops = (android.app.AppOpsManager) getSystemService(Context.APP_OPS_SERVICE);
+        java.lang.reflect.Method m = android.app.AppOpsManager.class.getMethod("checkOpNoThrow", int.class, int.class, String.class);
+        int mode = (Integer) m.invoke(ops, 10008, android.os.Process.myUid(), getPackageName()); // MIUI OP_AUTO_START
+        return mode != android.app.AppOpsManager.MODE_ALLOWED;
+      } catch (Throwable e) {
+        return false; // can't tell: don't nag
+      }
+    }
+
+    /** Opens MIUI's Autostart screen (falls back to this app's settings page). */
+    @JavascriptInterface
+    public void openAutostart() {
+      mainHandler.post(() -> {
+        Intent i = new Intent().setComponent(new ComponentName("com.miui.securitycenter",
+          "com.miui.permcenter.autostart.AutoStartManagementActivity"));
+        try { startActivity(i); return; } catch (Exception ignored) {}
+        try {
+          startActivity(new Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:" + getPackageName())));
+        } catch (Exception ignored) {}
+      });
+    }
+
     @JavascriptInterface
     public String version() {
       try {

@@ -28,6 +28,9 @@ README.md has install/build details; this file is "where things stand".
    MIUI RESETS Autostart to off on every app update/reinstall -> so MY_PACKAGE_REPLACED rejoin never fires on
    MIUI, and the user must re-enable Autostart after each update (or `adb shell appops set
    com.maxmadegg.yapapp 10008 allow`). Battery saver "No restrictions" is set on the user's phone.
+   Since 2026-11-11 the app shows a yellow bar when Autostart is off (MainActivity.autostartBlocked() reads MIUI
+   op 10008 via AppOpsManager.checkOpNoThrow reflection; works on the Redmi) with a button that opens
+   com.miui.securitycenter AutoStartManagementActivity. NOTE: MIUI flips it to off a few seconds AFTER install.
 5. Done 2026-11-11: auto-start after reboot, Enter = newline on phones (Send button sends).
    Ideas not started: kick/ban (needs room admin
    design), encrypted local history.
