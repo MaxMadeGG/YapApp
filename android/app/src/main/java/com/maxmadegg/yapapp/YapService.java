@@ -290,9 +290,11 @@ public class YapService extends Service {
   private void onMessage(JSONObject m) {
     String from = m.optString("name", "?");
     if (uiVisible || from.equals(myName)) return;
-    if (!m.optString("kind").isEmpty()) return; // reactions / channel changes don't buzz the phone
+    String kind = m.optString("kind");
+    if (!kind.isEmpty() && !kind.equals("dm")) return; // reactions / channel changes don't buzz the phone
     Person sender = new Person.Builder().setName(from).build();
-    unread.add(new Notification.MessagingStyle.Message(m.optString("text", ""), m.optLong("ts", System.currentTimeMillis()), sender));
+    String body = kind.equals("dm") ? "(direct message) " + m.optString("text", "") : m.optString("text", "");
+    unread.add(new Notification.MessagingStyle.Message(body, m.optLong("ts", System.currentTimeMillis()), sender));
     while (unread.size() > 25) unread.remove(0);
 
     Notification.MessagingStyle style = new Notification.MessagingStyle(new Person.Builder().setName(myName == null ? "You" : myName).build());

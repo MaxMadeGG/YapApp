@@ -93,6 +93,9 @@
   .item.static { cursor: default; }
   .item.static:hover { background: none; color: var(--muted); }
   .item .you { color: var(--muted); font-weight: 400; font-size: 13px; margin-left: 2px; }
+  .avatarWrap { position: relative; flex: none; display: flex; }
+  .item.offline .avatar { opacity: .55; }
+  .lock { color: var(--muted); font-size: 12px; text-align: center; padding: 2px 0 8px; }
   .presence { position: relative; flex: none; }
   .presence::after { content: ""; position: absolute; right: -4px; bottom: -4px; width: 8px; height: 8px;
     border-radius: 50%; background: var(--online); border: 2px solid var(--panel); }
@@ -296,7 +299,7 @@
         </div>
         <div id="channelList"></div>
         <div id="newChannelRow" class="hidden"><input id="newChannelInput" maxlength="40" autocomplete="off" placeholder="channel name, then Enter"></div>
-        <div class="sectionHead">Online</div>
+        <div class="sectionHead">Direct messages</div>
         <div id="peers"></div>
       </div>
       <div class="sideFoot">
@@ -458,13 +461,17 @@
   let currentCh = GENERAL
   const unread = new Set()   // channel ids with new messages from others
   let entries = []           // every history entry of this room (all channels)
-  const chOf = m => m.ch || GENERAL
+  const chOf = m => m.kind === 'dm' ? 'dm:' + m.peer : (m.ch || GENERAL)
+  const isDm = id => id.startsWith('dm:')
+  const people = new Set()   // names that can receive direct messages (published a key)
+  let online = []            // names of connected peers
   function resetChannels () { channels.clear(); channels.set(GENERAL, { name: 'general', ts: 0, deleted: false }) }
   resetChannels()
   let last = null            // { name, ts } of the previous main-list message (grouping + day dividers)
 
   // Record a history entry in the maps. Returns false for duplicates / stale toggles.
   function ingest (m) {
+    if (m.kind === 'key') { people.add(m.name); return true }
     if (m.kind === 'chan') {
       const prev = channels.get(m.target)
       if (prev && prev.ts >= m.ts) return false
@@ -605,7 +612,8 @@
     const text = document.createElement('div'); text.className = 'text'; text.textContent = m.text
     const rx = document.createElement('div'); rx.className = 'reactions'
     body.append(text, rx)
-    if (!opts.thread) {
+    const threads = !opts.thread && m.kind !== 'dm'
+    if (threads) {
       const th = document.createElement('div'); th.className = 'threadLink hidden'
       th.addEventListener('click', () => showThread(m.id))
       body.append(th)
@@ -615,7 +623,7 @@
     const rb = iconBtn('iconBtn reactBtn', 'Add reaction', '#i-smile')
     rb.addEventListener('click', e => { e.stopPropagation(); openPicker(m.id, rb) })
     bar.append(rb)
-    if (!opts.thread) {
+    if (threads) {
       const tb = iconBtn('iconBtn', 'Reply in thread', '#i-thread')
       tb.addEventListener('click', e => { e.stopPropagation(); showThread(m.id) })
       bar.append(tb)
@@ -651,6 +659,7 @@
   function addMsg (m, forceScroll) {
     if (!ingest(m)) return
     entries.push(m)
+    if (m.kind === 'key') { renderPeople(); return }
     if (m.kind === 'chan') {
       if (m.target === currentCh && channels.get(currentCh).deleted) switchChannel(GENERAL)
       else { renderChannels(); showChannelHeader() }
@@ -663,7 +672,7 @@
       return
     }
     if (chOf(m) !== currentCh) {
-      if (m.name !== myName) { unread.add(chOf(m)); renderChannels() }
+      if (m.name !== myName) { unread.add(chOf(m)); renderChannels(); renderPeople() }
       return
     }
     appendMain(m, forceScroll || nearBottom())
@@ -680,11 +689,14 @@
 
   function renderHistory (list) {
     entries = list.slice()
-    byId.clear(); reacts.clear(); replies.clear(); resetChannels()
+    byId.clear(); reacts.clear(); replies.clear(); resetChannels(); people.clear()
     for (const m of list) ingest(m)
-    const cur = channels.get(currentCh)
-    if (!cur || cur.deleted) currentCh = GENERAL
+    if (!isDm(currentCh)) {
+      const cur = channels.get(currentCh)
+      if (!cur || cur.deleted) currentCh = GENERAL
+    }
     renderChannels()
+    renderPeople()
     renderMain()
   }
 
@@ -692,13 +704,24 @@
     showChannelHeader()
     messagesEl.innerHTML = ''
     last = null
-    const top = entries.filter(m => !m.kind && !m.parent && chOf(m) === currentCh)
+    const top = entries.filter(m => (!m.kind || m.kind === 'dm') && !m.parent && chOf(m) === currentCh)
     if (!top.length) {
       const e = document.createElement('div')
       e.className = 'empty'
-      const b = document.createElement('b'); b.textContent = '#' + channels.get(currentCh).name
-      e.append(b, 'This is the very beginning of this channel. Say hi!')
+      const b = document.createElement('b')
+      if (isDm(currentCh)) {
+        b.textContent = currentCh.slice(3)
+        e.append(b, 'This is the start of your direct messages with ' + currentCh.slice(3) + '. Only the two of you can read them.')
+      } else {
+        b.textContent = '#' + channels.get(currentCh).name
+        e.append(b, 'This is the very beginning of this channel. Say hi!')
+      }
       messagesEl.append(e)
+    }
+    if (isDm(currentCh)) {
+      const lock = document.createElement('div'); lock.className = 'lock'
+      lock.textContent = '🔒 Encrypted: only you and ' + currentCh.slice(3) + ' can read these messages'
+      messagesEl.prepend(lock)
     }
     for (const m of top) appendMain(m, false)
     messagesEl.scrollTop = messagesEl.scrollHeight
@@ -708,8 +731,16 @@
 
   // ---- Channels (sidebar list, header, add / rename / delete)
   function showChannelHeader () {
+    if (isDm(currentCh)) {
+      const who = currentCh.slice(3)
+      $('roomLabel').textContent = who
+      $('roomLabel').title = 'Direct messages with ' + who
+      $('input').placeholder = 'Message ' + who
+      return
+    }
     const name = channels.get(currentCh).name
     $('roomLabel').textContent = '# ' + name
+    $('roomLabel').title = 'Click to rename the channel'
     $('input').placeholder = 'Message #' + name
     $('threadRoom').textContent = '#' + name
   }
@@ -720,6 +751,7 @@
     closeThread()
     closeDrawer()
     renderChannels()
+    renderPeople()
     renderMain()
     if (!IS_PHONE) $('input').focus()
   }
@@ -836,30 +868,41 @@
 
   // ---- Who's online (sidebar list + header faces)
   function renderPeers (list) {
+    online = list.filter(n => n && n !== '(connecting…)')
+    renderPeople()
+    const faces = $('onlineStack').querySelector('.faces')
+    faces.innerHTML = ''
+    const everyone = [myName, ...online].filter(Boolean)
+    for (const n of everyone.slice(0, 3)) faces.append(avatar(n, 'xs'))
+    $('onlineStack').querySelector('.count').textContent = everyone.length
+    $('onlineStack').title = everyone.join(', ') + ' online'
+  }
+
+  // Everyone we know in this room: people with a DM key + whoever is online right now.
+  function renderPeople () {
     const box = $('peers')
     box.innerHTML = ''
     const row = (name, you) => {
+      const id = 'dm:' + name
+      const on = you || online.includes(name)
       const div = document.createElement('div')
-      div.className = 'item static'
-      const p = document.createElement('span'); p.className = 'presence'
+      div.className = 'item' + (you ? ' static' : '') + (on ? '' : ' offline') +
+        (id === currentCh ? ' active' : '') + (unread.has(id) ? ' unread' : '')
+      const p = document.createElement('span'); p.className = on ? 'presence' : 'avatarWrap'
       p.append(avatar(name, 'sm'))
       const l = document.createElement('span'); l.className = 'label'; l.textContent = name + ' '
       if (you) { const y = document.createElement('span'); y.className = 'you'; y.textContent = 'you'; l.append(y) }
       div.append(p, l)
+      if (!you) div.addEventListener('click', () => switchChannel(id))
       box.append(div)
     }
     if (myName) row(myName, true)
-    for (const n of list) row(n, false)
-    if (!list.length) {
+    const others = [...new Set([...people, ...online])].filter(n => n !== myName).sort((a, b) => a.localeCompare(b))
+    for (const n of others) row(n, false)
+    if (!others.length) {
       const d = document.createElement('div'); d.className = 'lonely'; d.textContent = 'Looking for others…'
       box.append(d)
     }
-    const faces = $('onlineStack').querySelector('.faces')
-    faces.innerHTML = ''
-    const everyone = [myName, ...list].filter(Boolean)
-    for (const n of everyone.slice(0, 3)) faces.append(avatar(n, 'xs'))
-    $('onlineStack').querySelector('.count').textContent = everyone.length
-    $('onlineStack').title = everyone.join(', ') + ' online'
   }
   chat.on('peers', renderPeers)
 
@@ -875,7 +918,7 @@
   chat.on('room', showRoom)
 
   // Click-to-edit for a label: shows the input, saves on Enter/blur, cancels on Escape.
-  function inlineEdit (label, input, getValue, save) {
+  function inlineEdit (label, input, getValue, save, canEdit = () => true) {
     let open = false
     const finish = ok => {
       if (!open) return
@@ -891,6 +934,7 @@
     })
     input.addEventListener('blur', () => finish(true))
     const start = () => {
+      if (!canEdit()) return
       open = true
       input.value = getValue()
       label.classList.add('hidden')
@@ -904,7 +948,7 @@
   const startRename = inlineEdit($('roomLabel'), $('renameInput'), () => channels.get(currentCh).name, async v => {
     const m = await chat.setChannel(currentCh, v, false)
     if (m) addMsg(m)
-  })
+  }, () => !isDm(currentCh))
   inlineEdit($('roomName'), $('roomRenameInput'), () => $('roomName').textContent, async v => {
     const info = await chat.renameRoom(v)
     if (info) showRoom(info)
@@ -1036,8 +1080,14 @@
       box.value = ''
       autosize()
       const parent = parentId()
-      const ch = parent ? chOf(byId.get(parent) || {}) : currentCh
-      const m = await chat.send(text, parent ? { parent, ch } : { ch })
+      let m
+      if (!parent && isDm(currentCh)) {
+        m = await chat.sendDm(currentCh.slice(3), text)
+        if (m && m.error) { addSys(m.error); box.value = text; autosize(); return }
+      } else {
+        const ch = parent ? chOf(byId.get(parent) || {}) : currentCh
+        m = await chat.send(text, parent ? { parent, ch } : { ch })
+      }
       if (m) { addMsg(m, true); touchSession() }
     }
     box.addEventListener('input', autosize)

@@ -32,6 +32,7 @@
     join: (name, invite) => call('join', name, invite),
     leave: () => call('leave'),
     send: (text, extra) => call('send', text, extra),
+    sendDm: (toName, text) => call('sendDm', toName, text),
     react: (target, emoji, on) => call('react', target, emoji, on),
     setChannel: (target, name, deleted) => call('setChannel', target, name, deleted),
     createChannel: name => call('createChannel', name),

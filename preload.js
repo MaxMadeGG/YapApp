@@ -8,6 +8,7 @@ contextBridge.exposeInMainWorld('chat', {
   checkInvite: code => ipcRenderer.invoke('invite:check', code),
   leave: () => ipcRenderer.invoke('leave'),
   send: (text, extra) => ipcRenderer.invoke('send', text, extra),
+  sendDm: (toName, text) => ipcRenderer.invoke('dm', toName, text),
   react: (target, emoji, on) => ipcRenderer.invoke('react', target, emoji, on),
   setChannel: (target, name, deleted) => ipcRenderer.invoke('channel:set', target, name, deleted),
   createChannel: name => ipcRenderer.invoke('channel:create', name),

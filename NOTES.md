@@ -52,6 +52,13 @@ README.md has install/build details; this file is "where things stand".
   messages carry `ch` (missing = 'general', so pre-channel history is #general; #general can't be deleted).
   Anyone in the room can add/rename/delete channels. Unread marks per channel (in memory). Messages of deleted
   channels stay in history but are hidden. Verified with two isolated instances (create/rename/delete/unread sync).
+- DMs (2026-11-11): each device has a crypto_box keypair in identity.json (dataDir, NOT settings) and publishes
+  it as a kind:'key' history entry on join. A DM (kind:'dm') is boxed separately for every key of the recipient's
+  name AND the sender's name (so PC + phone both read it); everyone stores/forwards the ciphertext, core.view()
+  decrypts for the UI and drops DMs that aren't ours. Sidebar "Direct messages" = people with keys + online peers.
+  No threads in DMs (replies would be unencrypted); reactions OK. Verified with 3 instances: 3rd party stores
+  the DM entries but no plaintext. LIMIT: identity = display name, so someone joining with the same name gets
+  that person's FUTURE DMs (fine for invite-only friend rooms; would need key verification otherwise).
 - Ideas next: unread badges for other ROOMS (needs multi-room core), more emojis, edit/delete messages,
   remember last channel per room.
 

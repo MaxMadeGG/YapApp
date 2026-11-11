@@ -39,6 +39,7 @@ const methods = {
     sendStatus()
   },
   send: (text, extra) => core.send(text, extra),
+  sendDm: (toName, text) => core.sendDm(toName, text),
   react: (target, emoji, on) => core.react(target, emoji, on),
   setChannel: (target, name, deleted) => core.setChannel(target, name, deleted),
   createChannel: name => core.createChannel(name),

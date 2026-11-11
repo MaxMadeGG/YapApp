@@ -88,9 +88,22 @@ function validMeta (m) {
 //  - parent: id of the message this is a thread reply to
 //  - kind 'react': a reaction toggle { target, emoji, on } (newest per person+emoji wins).
 //  - kind 'chan': a channel's state { target: channel id, chName, deleted } (newest wins).
+//  - kind 'key': a device's public key for direct messages { pk }.
+//  - kind 'dm': a direct message, encrypted (crypto_box) separately for every device of
+//    the two people { toName, from: sender pk, boxes: { pk: { n: nonce, c: ciphertext } } }.
+//    Everyone stores and forwards it, only those two can read it.
 //  - ch: the channel a message belongs to (missing = 'general').
 //    The text of react/chan entries is a readable fallback for older apps.
 const isId = v => typeof v === 'string' && v.length > 0 && v.length <= 64
+const isHex = (v, n) => typeof v === 'string' && v.length === n && /^[0-9a-f]+$/.test(v)
+const MAX_BOXES = 16
+function validBoxes (b) {
+  if (!b || typeof b !== 'object' || Array.isArray(b)) return false
+  const keys = Object.keys(b)
+  if (!keys.length || keys.length > MAX_BOXES) return false
+  return keys.every(k => isHex(k, 64) && b[k] && isHex(b[k].n, 48) &&
+    typeof b[k].c === 'string' && b[k].c.length <= MAX_TEXT * 3)
+}
 function validMsg (m) {
   if (!(m && isId(m.id) && typeof m.name === 'string' && typeof m.text === 'string' &&
     typeof m.ts === 'number' && Number.isFinite(m.ts) && m.text.length <= MAX_TEXT)) return false
@@ -103,6 +116,11 @@ function validMsg (m) {
   if (m.kind === 'chan') {
     return isId(m.target) && typeof m.chName === 'string' && !!cleanChannel(m.chName) && typeof m.deleted === 'boolean'
   }
+  if (m.kind === 'key') return isHex(m.pk, 64)
+  if (m.kind === 'dm') {
+    return isHex(m.from, 64) && typeof m.toName === 'string' && m.toName.length > 0 && m.toName.length <= 40 &&
+      validBoxes(m.boxes)
+  }
   return m.kind === undefined
 }
 
@@ -113,6 +131,7 @@ function createCore ({ fs, dataDir, emit }) {
   const writeJSON = (name, data) => { try { fs.writeFileSync(file(name), JSON.stringify(data)) } catch {} }
 
   let swarm = null
+  let identity = null    // this device's DM keypair { pk, sk } (Buffers), from identity.json
   let me = null          // { name, secret, authKey }
   let history = []       // [{ id, name, text, ts }]
   let seen = new Set()
@@ -146,6 +165,8 @@ function createCore ({ fs, dataDir, emit }) {
       if (m.ch) e.ch = m.ch
       if (m.kind === 'react') Object.assign(e, { kind: 'react', target: m.target, emoji: m.emoji, on: m.on })
       if (m.kind === 'chan') Object.assign(e, { kind: 'chan', target: m.target, chName: cleanChannel(m.chName), deleted: m.deleted })
+      if (m.kind === 'key') Object.assign(e, { kind: 'key', pk: m.pk })
+      if (m.kind === 'dm') Object.assign(e, { kind: 'dm', toName: m.toName.slice(0, 40), from: m.from, boxes: m.boxes })
       history.push(e)
       added = true
     }
@@ -242,10 +263,11 @@ function createCore ({ fs, dataDir, emit }) {
         write(conn, { type: 'history', msgs: missing.slice(i, i + SYNC_BATCH) })
       }
     } else if (msg.type === 'history' && Array.isArray(msg.msgs)) {
-      if (addMessages(msg.msgs)) emit('history', history)
+      if (addMessages(msg.msgs)) emitHistory()
     } else if (msg.type === 'msg') {
       if (addMessages([msg.msg])) {
-        emit('message', msg.msg)
+        const v = view(history.find(h => h.id === msg.msg.id))
+        if (v) emit('message', v)
         forward(conn, { type: 'msg', msg: msg.msg })
       }
     } else if (msg.type === 'meta') {
@@ -269,7 +291,7 @@ function createCore ({ fs, dataDir, emit }) {
     // Already in this room as this name (e.g. the Android UI reattaching to the
     // background service): just resend the current state, don't reconnect.
     if (swarm && me && b4a.equals(me.secret, room.secret) && me.name === String(name).slice(0, 40)) {
-      emit('history', history)
+      emitHistory()
       sendPeers()
       return { ok: true, ...roomInfo() }
     }
@@ -283,7 +305,8 @@ function createCore ({ fs, dataDir, emit }) {
     if (validMeta(saved)) roomMeta = { name: cleanRoomName(saved.name), ts: saved.ts, by: saved.by }
     history = readJSON(historyName) || []
     seen = new Set(history.map(m => m.id))
-    emit('history', history)
+    emitHistory()
+    announceKey()
 
     swarm = new Hyperswarm()
     swarm.on('connection', onConnection)
@@ -304,6 +327,71 @@ function createCore ({ fs, dataDir, emit }) {
       swarm = null
       try { await s.destroy() } catch {}
     }
+  }
+
+  // ---- Direct messages: per-device keypair, every DM boxed for each device of both people.
+  function getIdentity () {
+    if (identity) return identity
+    const saved = readJSON('identity.json')
+    if (saved && isHex(saved.pk, 64) && isHex(saved.sk, 64)) {
+      identity = { pk: b4a.from(saved.pk, 'hex'), sk: b4a.from(saved.sk, 'hex') }
+    } else {
+      identity = { pk: b4a.alloc(sodium.crypto_box_PUBLICKEYBYTES), sk: b4a.alloc(sodium.crypto_box_SECRETKEYBYTES) }
+      sodium.crypto_box_keypair(identity.pk, identity.sk)
+      writeJSON('identity.json', { pk: b4a.toString(identity.pk, 'hex'), sk: b4a.toString(identity.sk, 'hex') })
+    }
+    return identity
+  }
+  const myPk = () => b4a.toString(getIdentity().pk, 'hex')
+
+  function keysOf (name) {
+    const out = new Set()
+    for (const m of history) if (m.kind === 'key' && m.name === name) out.add(m.pk)
+    return out
+  }
+
+  // What the UI gets: DMs decrypted (or dropped if they aren't ours), everything else as is.
+  function view (m) {
+    if (!m || m.kind !== 'dm') return m
+    const box = m.boxes[myPk()]
+    if (!box) return null
+    try {
+      const c = b4a.from(box.c, 'base64')
+      if (c.length < sodium.crypto_box_MACBYTES) return null
+      const out = b4a.alloc(c.length - sodium.crypto_box_MACBYTES)
+      if (!sodium.crypto_box_open_easy(out, c, b4a.from(box.n, 'hex'), b4a.from(m.from, 'hex'), getIdentity().sk)) return null
+      const peer = m.name === me.name ? m.toName : m.name
+      return { id: m.id, name: m.name, ts: m.ts, kind: 'dm', peer, text: b4a.toString(out) }
+    } catch { return null }
+  }
+  const views = list => list.map(view).filter(Boolean)
+  const emitHistory = () => emit('history', views(history))
+
+  function sendDm (toName, text) {
+    text = String(text).slice(0, MAX_TEXT)
+    toName = String(toName).slice(0, 40)
+    if (!me || !text.trim() || !toName) return null
+    const theirs = keysOf(toName)
+    if (!theirs.size) return { error: toName + ' needs to update YapApp before you can send them direct messages.' }
+    const pks = new Set([...theirs, ...keysOf(me.name), myPk()])
+    if (pks.size > MAX_BOXES) return { error: 'Too many devices to send to.' }
+    const msg = b4a.from(text)
+    const boxes = {}
+    for (const pk of pks) {
+      const n = randomBytes(sodium.crypto_box_NONCEBYTES)
+      const c = b4a.alloc(msg.length + sodium.crypto_box_MACBYTES)
+      sodium.crypto_box_easy(c, msg, n, b4a.from(pk, 'hex'), getIdentity().sk)
+      boxes[pk] = { n: b4a.toString(n, 'hex'), c: b4a.toString(c, 'base64') }
+    }
+    const m = publish({ id: newId(), name: me.name, text: '', ts: Date.now(), kind: 'dm', toName, from: myPk(), boxes })
+    return view(m)
+  }
+
+  // Announce this device's key in the room once (as a history entry, so it syncs to everyone).
+  function announceKey () {
+    const pk = myPk()
+    if (history.some(m => m.kind === 'key' && m.name === me.name && m.pk === pk)) return
+    publish({ id: newId(), name: me.name, text: '', ts: Date.now(), kind: 'key', pk })
   }
 
   function publish (m) {
@@ -384,7 +472,7 @@ function createCore ({ fs, dataDir, emit }) {
     }
   }
 
-  return { join, leave, send, react, setChannel, createChannel, renameRoom, createInvite: makeInvite, checkInvite, getSettings, setSettings, debugInfo }
+  return { join, leave, send, sendDm, react, setChannel, createChannel, renameRoom, createInvite: makeInvite, checkInvite, getSettings, setSettings, debugInfo }
 }
 
 module.exports = { createCore, parseInvite, makeInvite, hmacSha256, hkdf32 }
