@@ -1,6 +1,6 @@
 // Electron host: window, IPC to the UI, clipboard and self-update.
 // All chat logic lives in core.js (shared with the Android app).
-const { app, BrowserWindow, ipcMain, clipboard } = require('electron')
+const { app, BrowserWindow, ipcMain, clipboard, dialog } = require('electron')
 const path = require('path')
 const fs = require('fs')
 const { createCore } = require('./core.js')
@@ -25,7 +25,44 @@ ipcMain.handle('settings:set', (e, changes) => getCore().setSettings(changes))
 ipcMain.handle('join', (e, name, invite) => getCore().join(name, invite))
 ipcMain.handle('leave', () => getCore().leave())
 ipcMain.handle('send', (e, text, extra) => getCore().send(text, extra))
-ipcMain.handle('dm', (e, toName, text) => getCore().sendDm(toName, text))
+ipcMain.handle('dm', (e, toName, text, files) => getCore().sendDm(toName, text, files))
+ipcMain.handle('file:add', (e, bytes, name, mime, relPath) => getCore().addFile(bytes, name, mime, relPath))
+ipcMain.handle('file:get', (e, ref) => getCore().getFile(ref))
+
+// Names and folder paths come from other people: keep them inside the chosen folder.
+function safeName (n) {
+  const s = String(n).replace(/[<>:"/\\|?*\x00-\x1f]/g, '_').replace(/^\.+$/, '_').trim()
+  return s.slice(0, 150) || 'file'
+}
+function safeRel (p) { return String(p).split(/[\\/]+/).filter(x => x && x !== '.' && x !== '..').map(safeName) }
+
+// Save one file (Save As dialog) or a whole folder (pick where to put it).
+ipcMain.handle('file:save', async (e, refs, folder) => {
+  const core = getCore()
+  if (!Array.isArray(refs) || !refs.length) return 0
+  if (!folder) {
+    const r = await dialog.showSaveDialog(win, { defaultPath: path.join(app.getPath('downloads'), safeName(refs[0].n)) })
+    if (r.canceled || !r.filePath) return 0
+    const bytes = await core.getFile(refs[0])
+    if (!bytes) throw new Error('Could not download the file (is anyone who has it online?)')
+    fs.writeFileSync(r.filePath, bytes)
+    return 1
+  }
+  const r = await dialog.showOpenDialog(win, { title: 'Where should the folder "' + folder + '" go?',
+    defaultPath: app.getPath('downloads'), properties: ['openDirectory', 'createDirectory'] })
+  if (r.canceled || !r.filePaths[0]) return 0
+  let saved = 0
+  for (const ref of refs) {
+    const bytes = await core.getFile(ref)
+    if (!bytes) continue
+    const parts = safeRel(ref.p || ref.n)
+    const target = path.join(r.filePaths[0], ...parts)
+    fs.mkdirSync(path.dirname(target), { recursive: true })
+    fs.writeFileSync(target, bytes)
+    saved++
+  }
+  return saved
+})
 ipcMain.handle('react', (e, target, emoji, on) => getCore().react(target, emoji, on))
 ipcMain.handle('channel:set', (e, target, name, deleted) => getCore().setChannel(target, name, deleted))
 ipcMain.handle('channel:create', (e, name) => getCore().createChannel(name))

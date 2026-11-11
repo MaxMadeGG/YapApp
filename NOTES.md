@@ -59,6 +59,14 @@ README.md has install/build details; this file is "where things stand".
   No threads in DMs (replies would be unencrypted); reactions OK. Verified with 3 instances: 3rd party stores
   the DM entries but no plaintext. LIMIT: identity = display name, so someone joining with the same name gets
   that person's FUTURE DMs (fine for invite-only friend rooms; would need key verification otherwise).
+- Files (2026-11-11): message.files = [{h,k,n,s,m,p?}]. Each file = secretbox-encrypted blob (random key) stored
+  at <dataDir>/blobs/<sha256>; peers fetch on demand with 'want' {h} -> 'blob' {h,i,n,d} 256 KB chunks, first
+  responder wins, hash verified, 60 s idle timeout, re-asks on new/closed peers. Key travels in the message (inside
+  the encrypted payload for DMs). 50 MB/file. Desktop: paperclip/folder buttons, Ctrl+V paste, drag & drop (folders
+  via webkitGetAsEntry); save via dialogs in main.js (paths sanitised). Android: Java ACTION_OPEN_DOCUMENT picker
+  copies into files/import (no bytes through the WebView), saves via MediaStore into Downloads/YapApp[/folder].
+  Images <=15 MB auto-preview; viewer overlay. Verified: 2 desktop instances (paste, file bytes, folder paths, DM
+  image) + on the phone add/get/save (picker itself needs a human tap - not verified).
 - Ideas next: unread badges for other ROOMS (needs multi-room core), more emojis, edit/delete messages,
   remember last channel per room.
 

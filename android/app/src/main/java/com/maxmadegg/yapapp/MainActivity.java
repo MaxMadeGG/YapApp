@@ -23,7 +23,19 @@ import android.os.PowerManager;
 import android.provider.Settings;
 import android.view.View;
 import android.view.WindowInsets;
+import android.util.Log;
 import android.webkit.JavascriptInterface;
+import android.content.ContentValues;
+import android.database.Cursor;
+import android.os.Environment;
+import android.provider.MediaStore;
+import android.provider.OpenableColumns;
+import java.io.File;
+import java.io.FileInputStream;
+import java.io.FileOutputStream;
+import java.io.InputStream;
+import java.io.OutputStream;
+import org.json.JSONArray;
 import android.webkit.WebSettings;
 import android.webkit.WebView;
 import android.webkit.WebViewClient;
@@ -166,6 +178,51 @@ public class MainActivity extends Activity {
     @JavascriptInterface
     public void installUpdate() { updater.install(); }
 
+    /** System file picker (several files); result goes to window.__yapPicked. */
+    @JavascriptInterface
+    public void pickFiles() {
+      mainHandler.post(() -> {
+        Intent i = new Intent(Intent.ACTION_OPEN_DOCUMENT).addCategory(Intent.CATEGORY_OPENABLE)
+          .setType("*/*").putExtra(Intent.EXTRA_ALLOW_MULTIPLE, true);
+        try { startActivityForResult(i, REQ_PICK); }
+        catch (Exception e) { deliverPicked(new JSONArray()); }
+      });
+    }
+
+    /** Copy a decrypted export (files/export/...) into Downloads/YapApp/<relName>, then delete it. */
+    @JavascriptInterface
+    public boolean saveToDownloads(String path, String relName, String mime) {
+      File src = new File(path);
+      try {
+        File exportDir = new File(getFilesDir(), "export").getCanonicalFile();
+        if (!src.getCanonicalPath().startsWith(exportDir.getPath() + File.separator)) return false;
+        StringBuilder dir = new StringBuilder(Environment.DIRECTORY_DOWNLOADS + "/YapApp");
+        String[] parts = relName.split("[/\\\\]+");
+        String name = "file";
+        for (int k = 0; k < parts.length; k++) {
+          String part = parts[k].replaceAll("[\\x00-\\x1f<>:\"|?*]", "_").trim();
+          if (part.isEmpty() || part.equals(".") || part.equals("..")) continue;
+          if (k == parts.length - 1) name = part; else dir.append('/').append(part);
+        }
+        ContentValues v = new ContentValues();
+        v.put(MediaStore.MediaColumns.DISPLAY_NAME, name);
+        v.put(MediaStore.MediaColumns.MIME_TYPE, mime == null || mime.isEmpty() ? "application/octet-stream" : mime);
+        v.put(MediaStore.MediaColumns.RELATIVE_PATH, dir.toString());
+        Uri uri = getContentResolver().insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI, v);
+        if (uri == null) return false;
+        try (InputStream in = new FileInputStream(src); OutputStream out = getContentResolver().openOutputStream(uri)) {
+          byte[] buf = new byte[65536];
+          int n;
+          while ((n = in.read(buf)) > 0) out.write(buf, 0, n);
+        }
+        return true;
+      } catch (Exception e) {
+        return false;
+      } finally {
+        src.delete();
+      }
+    }
+
     /** Xiaomi/MIUI only: true when its "Autostart" switch is off for us, which blocks
      *  BootReceiver (no reconnect after a reboot). MIUI turns it off after every update. */
     @JavascriptInterface
@@ -203,6 +260,67 @@ public class MainActivity extends Activity {
         return "?";
       }
     }
+  }
+
+  static final int REQ_PICK = 4242;
+  static final long MAX_PICK = 50L * 1024 * 1024;
+
+  @Override
+  protected void onActivityResult(int requestCode, int resultCode, Intent data) {
+    super.onActivityResult(requestCode, resultCode, data);
+    if (requestCode != REQ_PICK) return;
+    List<Uri> uris = new ArrayList<>();
+    if (resultCode == RESULT_OK && data != null) {
+      if (data.getClipData() != null) {
+        for (int k = 0; k < data.getClipData().getItemCount(); k++) uris.add(data.getClipData().getItemAt(k).getUri());
+      } else if (data.getData() != null) {
+        uris.add(data.getData());
+      }
+    }
+    // Copy off the UI thread into files/import/, then hand the paths to the page.
+    new Thread(() -> {
+      JSONArray out = new JSONArray();
+      File dir = new File(getFilesDir(), "import");
+      dir.mkdirs();
+      for (Uri u : uris) {
+        String name = "file";
+        long size = -1;
+        try (Cursor c = getContentResolver().query(u, null, null, null, null)) {
+          if (c != null && c.moveToFirst()) {
+            int ni = c.getColumnIndex(OpenableColumns.DISPLAY_NAME), si = c.getColumnIndex(OpenableColumns.SIZE);
+            if (ni >= 0 && c.getString(ni) != null) name = c.getString(ni);
+            if (si >= 0 && !c.isNull(si)) size = c.getLong(si);
+          }
+        } catch (Exception ignored) {}
+        String mime = getContentResolver().getType(u);
+        try {
+          JSONObject o = new JSONObject().put("name", name).put("mime", mime == null ? "" : mime);
+          if (size > MAX_PICK) { out.put(o.put("error", "too big")); continue; }
+          File f = new File(dir, java.util.UUID.randomUUID().toString());
+          long total = 0;
+          try (InputStream in = getContentResolver().openInputStream(u); OutputStream os = new FileOutputStream(f)) {
+            byte[] buf = new byte[65536];
+            int n;
+            while ((n = in.read(buf)) > 0) {
+              total += n;
+              if (total > MAX_PICK) break;
+              os.write(buf, 0, n);
+            }
+          }
+          if (total > MAX_PICK) { f.delete(); out.put(o.put("error", "too big")); continue; }
+          out.put(o.put("path", f.getAbsolutePath()).put("size", total));
+        } catch (Exception e) {
+          Log.w("YapApp", "could not read picked file", e);
+        }
+      }
+      deliverPicked(out);
+    }).start();
+  }
+
+  private void deliverPicked(JSONArray list) {
+    mainHandler.post(() -> {
+      if (webView != null) webView.evaluateJavascript("window.__yapPicked && window.__yapPicked(" + list + ")", null);
+    });
   }
 
   @Override

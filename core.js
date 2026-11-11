@@ -10,6 +10,10 @@ const SYNC_BATCH = 200        // messages per 'history' packet
 const MAX_LINE = 16_000_000   // max bytes of one protocol line
 const MAX_TEXT = 4000
 const AUTH_TIMEOUT = 15000
+const MAX_FILE = 50 * 1024 * 1024 // per attached file
+const MAX_FILES = 50              // per message
+const CHUNK = 256 * 1024          // file transfer piece size
+const WANT_TIMEOUT = 60000        // give up fetching a file after this long without progress
 const SETTINGS_KEYS = ['name', 'invite', 'lastUsed', 'rooms'] // rooms = JSON list of remembered invites
 
 // ---- Crypto helpers (SHA-256 based, identical on every runtime) -------------
@@ -93,22 +97,39 @@ function validMeta (m) {
 //    the two people { toName, from: sender pk, boxes: { pk: { n: nonce, c: ciphertext } } }.
 //    Everyone stores and forwards it, only those two can read it.
 //  - ch: the channel a message belongs to (missing = 'general').
+//  - files: attachments [{ h: blob hash, k: blob key, n: name, s: size, m: mime, p?: path in a folder }].
+//    Blobs are encrypted with their own random key (secretbox) and fetched from peers by hash;
+//    the key only travels inside the message (and inside the encrypted payload for DMs).
 //    The text of react/chan entries is a readable fallback for older apps.
 const isId = v => typeof v === 'string' && v.length > 0 && v.length <= 64
 const isHex = (v, n) => typeof v === 'string' && v.length === n && /^[0-9a-f]+$/.test(v)
 const MAX_BOXES = 16
+function cleanFiles (f) {
+  if (!Array.isArray(f) || !f.length || f.length > MAX_FILES) return null
+  const out = []
+  for (const x of f) {
+    if (!x || !isHex(x.h, 64) || !isHex(x.k, 64) || typeof x.n !== 'string' || !x.n || x.n.length > 200 ||
+      typeof x.s !== 'number' || !(x.s >= 0 && x.s <= MAX_FILE) || typeof x.m !== 'string' || x.m.length > 100) return null
+    if (x.p !== undefined && (typeof x.p !== 'string' || x.p.length > 500)) return null
+    const e = { h: x.h, k: x.k, n: x.n, s: x.s, m: x.m }
+    if (x.p) e.p = x.p
+    out.push(e)
+  }
+  return out
+}
 function validBoxes (b) {
   if (!b || typeof b !== 'object' || Array.isArray(b)) return false
   const keys = Object.keys(b)
   if (!keys.length || keys.length > MAX_BOXES) return false
   return keys.every(k => isHex(k, 64) && b[k] && isHex(b[k].n, 48) &&
-    typeof b[k].c === 'string' && b[k].c.length <= MAX_TEXT * 3)
+    typeof b[k].c === 'string' && b[k].c.length <= 64000)
 }
 function validMsg (m) {
   if (!(m && isId(m.id) && typeof m.name === 'string' && typeof m.text === 'string' &&
     typeof m.ts === 'number' && Number.isFinite(m.ts) && m.text.length <= MAX_TEXT)) return false
   if (m.parent !== undefined && !isId(m.parent)) return false
   if (m.ch !== undefined && !isId(m.ch)) return false
+  if (m.files !== undefined && !cleanFiles(m.files)) return false
   if (m.kind === 'react') {
     return isId(m.target) && typeof m.emoji === 'string' && m.emoji.length > 0 && m.emoji.length <= 16 &&
       typeof m.on === 'boolean'
@@ -163,6 +184,7 @@ function createCore ({ fs, dataDir, emit }) {
       const e = { id: m.id, name: m.name.slice(0, 40), text: m.text, ts: m.ts }
       if (m.parent) e.parent = m.parent
       if (m.ch) e.ch = m.ch
+      if (m.files) e.files = cleanFiles(m.files)
       if (m.kind === 'react') Object.assign(e, { kind: 'react', target: m.target, emoji: m.emoji, on: m.on })
       if (m.kind === 'chan') Object.assign(e, { kind: 'chan', target: m.target, chName: cleanChannel(m.chName), deleted: m.deleted })
       if (m.kind === 'key') Object.assign(e, { kind: 'key', pk: m.pk })
@@ -214,6 +236,7 @@ function createCore ({ fs, dataDir, emit }) {
       write(conn, { type: 'hello', name: me.name })
       write(conn, { type: 'ids', ids: history.map(m => m.id) })
       write(conn, { type: 'meta', meta: roomMeta })
+      for (const [h, p] of pending) if (!p.from) write(conn, { type: 'want', h })
     }
 
     // Newline-delimited JSON. Split on the byte so multi-byte UTF-8 (emoji)
@@ -238,6 +261,7 @@ function createCore ({ fs, dataDir, emit }) {
       if (!peers.has(conn)) return
       const name = peers.get(conn)
       peers.delete(conn)
+      for (const [h, p] of pending) if (p.from === conn) askForBlob(h)
       sendPeers()
       if (name) emit('system', `${name} left`)
     }
@@ -270,6 +294,10 @@ function createCore ({ fs, dataDir, emit }) {
         if (v) emit('message', v)
         forward(conn, { type: 'msg', msg: msg.msg })
       }
+    } else if (msg.type === 'want') {
+      serveBlob(conn, msg.h)
+    } else if (msg.type === 'blob') {
+      onBlobChunk(conn, msg)
     } else if (msg.type === 'meta') {
       if (applyMeta(msg.meta)) {
         emit('system', `${roomMeta.by} renamed the room to "${roomMeta.name}"`)
@@ -322,6 +350,7 @@ function createCore ({ fs, dataDir, emit }) {
       writeJSON(historyName, history)
     }
     peers.clear()
+    for (const h of [...pending.keys()]) finishFetch(h, false)
     if (swarm) {
       const s = swarm
       swarm = null
@@ -361,21 +390,29 @@ function createCore ({ fs, dataDir, emit }) {
       const out = b4a.alloc(c.length - sodium.crypto_box_MACBYTES)
       if (!sodium.crypto_box_open_easy(out, c, b4a.from(box.n, 'hex'), b4a.from(m.from, 'hex'), getIdentity().sk)) return null
       const peer = m.name === me.name ? m.toName : m.name
-      return { id: m.id, name: m.name, ts: m.ts, kind: 'dm', peer, text: b4a.toString(out) }
+      let text = b4a.toString(out)
+      let files
+      if (text.startsWith('{"yap":1')) {
+        try { const o = JSON.parse(text); text = String(o.t || ''); files = o.f ? cleanFiles(o.f) : undefined } catch {}
+      }
+      const v = { id: m.id, name: m.name, ts: m.ts, kind: 'dm', peer, text }
+      if (files) v.files = files
+      return v
     } catch { return null }
   }
   const views = list => list.map(view).filter(Boolean)
   const emitHistory = () => emit('history', views(history))
 
-  function sendDm (toName, text) {
-    text = String(text).slice(0, MAX_TEXT)
+  function sendDm (toName, text, files) {
+    text = String(text || '').slice(0, MAX_TEXT)
     toName = String(toName).slice(0, 40)
-    if (!me || !text.trim() || !toName) return null
+    files = files ? cleanFiles(files) : null
+    if (!me || (!text.trim() && !files) || !toName) return null
     const theirs = keysOf(toName)
     if (!theirs.size) return { error: toName + ' needs to update YapApp before you can send them direct messages.' }
     const pks = new Set([...theirs, ...keysOf(me.name), myPk()])
     if (pks.size > MAX_BOXES) return { error: 'Too many devices to send to.' }
-    const msg = b4a.from(text)
+    const msg = b4a.from(files ? JSON.stringify({ yap: 1, t: text, f: files }) : text)
     const boxes = {}
     for (const pk of pks) {
       const n = randomBytes(sodium.crypto_box_NONCEBYTES)
@@ -385,6 +422,98 @@ function createCore ({ fs, dataDir, emit }) {
     }
     const m = publish({ id: newId(), name: me.name, text: '', ts: Date.now(), kind: 'dm', toName, from: myPk(), boxes })
     return view(m)
+  }
+
+  // ---- Files: encrypted blobs in <dataDir>/blobs/<sha256>, fetched from peers on demand.
+  const blobPath = h => file('blobs') + '/' + h
+  const hasBlob = h => { try { fs.statSync(blobPath(h)); return true } catch { return false } }
+  const pending = new Map() // hash -> { chunks, got, total, from, waiters, timer }
+
+  function addFile (bytes, name, mime, relPath) {
+    const data = typeof bytes === 'string' ? b4a.from(bytes, 'base64') : b4a.from(bytes)
+    if (data.length > MAX_FILE) return { error: `"${name}" is too big (max ${MAX_FILE / 1024 / 1024} MB).` }
+    const key = randomBytes(sodium.crypto_secretbox_KEYBYTES)
+    const nonce = randomBytes(sodium.crypto_secretbox_NONCEBYTES)
+    const ct = b4a.alloc(data.length + sodium.crypto_secretbox_MACBYTES)
+    sodium.crypto_secretbox_easy(ct, data, nonce, key)
+    const blob = b4a.concat([nonce, ct])
+    const h = b4a.toString(sha256(blob), 'hex')
+    try { fs.mkdirSync(file('blobs'), { recursive: true }) } catch {}
+    fs.writeFileSync(blobPath(h), blob)
+    const ref = { h, k: b4a.toString(key, 'hex'), n: String(name || 'file').slice(0, 200), s: data.length,
+      m: String(mime || 'application/octet-stream').slice(0, 100) }
+    if (relPath) ref.p = String(relPath).slice(0, 500)
+    return ref
+  }
+
+  // Decrypted bytes of an attachment, downloading the blob first if needed (null if unavailable).
+  async function getFile (ref) {
+    if (!ref || !isHex(ref.h, 64) || !isHex(ref.k, 64)) return null
+    if (!hasBlob(ref.h) && !(await fetchBlob(ref.h))) return null
+    try {
+      const blob = fs.readFileSync(blobPath(ref.h))
+      const nb = sodium.crypto_secretbox_NONCEBYTES
+      const ct = blob.subarray(nb)
+      const out = b4a.alloc(ct.length - sodium.crypto_secretbox_MACBYTES)
+      if (!sodium.crypto_secretbox_open_easy(out, ct, blob.subarray(0, nb), b4a.from(ref.k, 'hex'))) return null
+      return out
+    } catch { return null }
+  }
+
+  function fetchBlob (h) {
+    if (hasBlob(h)) return Promise.resolve(true)
+    let p = pending.get(h)
+    if (!p) {
+      p = { chunks: [], got: 0, total: -1, from: null, waiters: [], timer: null }
+      pending.set(h, p)
+      askForBlob(h)
+    }
+    return new Promise(resolve => p.waiters.push(resolve))
+  }
+  function finishFetch (h, ok) {
+    const p = pending.get(h)
+    if (!p) return
+    clearTimeout(p.timer)
+    pending.delete(h)
+    for (const w of p.waiters) w(ok)
+  }
+  function armTimeout (h) {
+    const p = pending.get(h)
+    clearTimeout(p.timer)
+    p.timer = setTimeout(() => finishFetch(h, false), WANT_TIMEOUT)
+  }
+  function askForBlob (h, only) {
+    const p = pending.get(h)
+    p.chunks = []; p.got = 0; p.total = -1; p.from = null
+    armTimeout(h)
+    for (const conn of only ? [only] : peers.keys()) write(conn, { type: 'want', h })
+  }
+  function serveBlob (conn, h) {
+    if (!isHex(h, 64) || !hasBlob(h)) return
+    let blob
+    try { blob = fs.readFileSync(blobPath(h)) } catch { return }
+    const n = Math.max(1, Math.ceil(blob.length / CHUNK))
+    for (let i = 0; i < n; i++) {
+      write(conn, { type: 'blob', h, i, n, d: b4a.toString(blob.subarray(i * CHUNK, (i + 1) * CHUNK), 'base64') })
+    }
+  }
+  function onBlobChunk (conn, msg) {
+    const p = pending.get(msg.h)
+    if (!p || typeof msg.d !== 'string' || !Number.isInteger(msg.i) || !Number.isInteger(msg.n)) return
+    if (p.from && p.from !== conn) return // first peer to answer serves the whole file
+    const maxN = Math.ceil((MAX_FILE + 64) / CHUNK) + 1
+    if (msg.n < 1 || msg.n > maxN || msg.i < 0 || msg.i >= msg.n || (p.total !== -1 && p.total !== msg.n)) return
+    p.from = conn
+    p.total = msg.n
+    if (!p.chunks[msg.i]) { p.chunks[msg.i] = b4a.from(msg.d, 'base64'); p.got++ }
+    armTimeout(msg.h)
+    emit('file-progress', { h: msg.h, got: p.got, total: p.total })
+    if (p.got < p.total) return
+    const blob = b4a.concat(p.chunks)
+    if (b4a.toString(sha256(blob), 'hex') !== msg.h) { askForBlob(msg.h); return } // corrupt: ask everyone again
+    try { fs.mkdirSync(file('blobs'), { recursive: true }) } catch {}
+    try { fs.writeFileSync(blobPath(msg.h), blob) } catch { finishFetch(msg.h, false); return }
+    finishFetch(msg.h, true)
   }
 
   // Announce this device's key in the room once (as a history entry, so it syncs to everyone).
@@ -403,9 +532,11 @@ function createCore ({ fs, dataDir, emit }) {
 
   // extra.parent = reply in that message's thread.
   function send (text, extra) {
-    text = String(text).slice(0, MAX_TEXT)
-    if (!me || !text.trim()) return null
+    text = String(text || '').slice(0, MAX_TEXT)
+    const files = extra && extra.files ? cleanFiles(extra.files) : null
+    if (!me || (!text.trim() && !files)) return null
     const m = { id: newId(), name: me.name, text, ts: Date.now() }
+    if (files) m.files = files
     if (extra && isId(extra.parent)) m.parent = extra.parent
     if (extra && isId(extra.ch) && extra.ch !== 'general') m.ch = extra.ch
     return publish(m)
@@ -472,7 +603,7 @@ function createCore ({ fs, dataDir, emit }) {
     }
   }
 
-  return { join, leave, send, sendDm, react, setChannel, createChannel, renameRoom, createInvite: makeInvite, checkInvite, getSettings, setSettings, debugInfo }
+  return { join, leave, send, sendDm, addFile, getFile, react, setChannel, createChannel, renameRoom, createInvite: makeInvite, checkInvite, getSettings, setSettings, debugInfo }
 }
 
 module.exports = { createCore, parseInvite, makeInvite, hmacSha256, hkdf32 }

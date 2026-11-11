@@ -39,7 +39,28 @@ const methods = {
     sendStatus()
   },
   send: (text, extra) => core.send(text, extra),
-  sendDm: (toName, text) => core.sendDm(toName, text),
+  sendDm: (toName, text, files) => core.sendDm(toName, text, files),
+  // Files picked by the Java side are copied into <dataDir>/import first (no big strings over IPC).
+  addFileFromPath: (p, name, mime, relPath) => {
+    if (!String(p).startsWith(dataDir + '/import/')) throw new Error('bad path')
+    const data = fs.readFileSync(p)
+    try { fs.unlinkSync(p) } catch {}
+    return core.addFile(data, name, mime, relPath)
+  },
+  getFile: async ref => {
+    const b = await core.getFile(ref)
+    return b ? b4a.toString(b, 'base64') : null
+  },
+  // Decrypt to <dataDir>/export/<hash> so Java can copy it into Downloads.
+  exportFile: async ref => {
+    const b = await core.getFile(ref)
+    if (!b) return null
+    const dir = dataDir + '/export'
+    try { fs.mkdirSync(dir, { recursive: true }) } catch {}
+    const p = dir + '/' + ref.h
+    fs.writeFileSync(p, b)
+    return p
+  },
   react: (target, emoji, on) => core.react(target, emoji, on),
   setChannel: (target, name, deleted) => core.setChannel(target, name, deleted),
   createChannel: name => core.createChannel(name),

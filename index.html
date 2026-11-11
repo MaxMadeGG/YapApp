@@ -3,13 +3,14 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' blob: data:; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline'">
 <title>YapApp</title>
 <style>
   :root {
     --bg: #1e1f24; --panel: #17181c; --line: #2c2e35; --text: #e6e6ea;
     --muted: #8b8d97; --accent: #5b8cff; --input: #26282f; --hover: #24262d;
     --active: #2f4f9a; --online: #3ecf6e;
+    color-scheme: dark; /* dark native scrollbars and form controls */
   }
   * { box-sizing: border-box; }
   html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text);
@@ -192,6 +193,37 @@
   #picker button { background: none; padding: 4px 6px; font-size: 20px; line-height: 1; border-radius: 6px; }
   #picker button:hover { background: var(--hover); filter: none; }
 
+  /* Attachments */
+  #attachTray { display: flex; flex-wrap: wrap; gap: 6px; padding: 8px 10px 0; }
+  .attach { display: flex; align-items: center; gap: 6px; background: var(--panel); border: 1px solid var(--line);
+    border-radius: 8px; padding: 3px 3px 3px 8px; font-size: 12px; max-width: 260px; }
+  .attach.pic { padding-left: 3px; }
+  .attach img { width: 40px; height: 40px; object-fit: cover; border-radius: 6px; }
+  .attach .name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--muted); }
+  .attach .iconBtn { padding: 3px; }
+  .attach svg.i { width: 14px; height: 14px; }
+  .files { display: flex; flex-direction: column; gap: 6px; margin-top: 4px; }
+  .imgGrid { display: flex; flex-wrap: wrap; gap: 6px; }
+  .imgTile { max-width: min(360px, 100%); border-radius: 8px; overflow: hidden; cursor: zoom-in; background: var(--panel);
+    border: 1px solid var(--line); min-width: 120px; min-height: 80px; display: flex; align-items: center; justify-content: center; }
+  .imgTile img { display: block; max-width: 100%; max-height: 300px; }
+  .imgTile .status { color: var(--muted); font-size: 12px; padding: 10px; text-align: center; }
+  .imgTile.missing { cursor: pointer; }
+  .fileCard { display: flex; align-items: center; gap: 10px; background: var(--panel); border: 1px solid var(--line);
+    border-radius: 8px; padding: 8px 10px; max-width: 420px; }
+  .fileCard svg.big { width: 28px; height: 28px; color: #8fb0ff; }
+  .fileCard .info { flex: 1; min-width: 0; }
+  .fileCard .fname { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .fileCard .meta { color: var(--muted); font-size: 12px; }
+  .fileCard button { padding: 5px 10px; font-size: 13px; white-space: nowrap; }
+  .msg .text:empty { display: none; }
+  #viewer { position: fixed; inset: 0; z-index: 50; background: rgba(0,0,0,.88); display: flex; flex-direction: column; }
+  #viewer.hidden { display: none; }
+  #viewer .bar { display: flex; align-items: center; gap: 10px; padding: 10px 14px; color: #ddd; font-size: 13px; }
+  #viewer .bar span { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  #viewer .bar button { padding: 5px 12px; }
+  #viewerImg { margin: auto; max-width: calc(100% - 20px); max-height: calc(100% - 70px); object-fit: contain; }
+
   /* Thread side panel */
   #thread { display: none; width: 400px; flex: none; flex-direction: column; border-left: 1px solid var(--line); min-width: 0; }
   #chat.threadOpen #thread { display: flex; }
@@ -220,7 +252,10 @@
     #onlineStack .count { display: none; }
     .msg { padding: 2px 12px; }
     .sys { padding-left: 58px; }
-    .composer, #thread .composer { margin: 0 8px 8px; display: flex; align-items: flex-end; }
+    .composer, #thread .composer { margin: 0 8px 8px; display: flex; align-items: flex-end; flex-wrap: wrap; }
+    .composer textarea { flex: 1; width: auto; min-width: 0; }
+    #attachTray { flex: 1 1 100%; }
+    #folderBtn { display: none; }
     .composer textarea { padding: 10px 12px; }
     .composer .tools { padding: 4px 6px 6px 0; }
     .composer .hint { display: none; }
@@ -243,6 +278,9 @@
   <symbol id="i-invite" viewBox="0 0 24 24"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M19 8v6M22 11h-6"/></symbol>
   <symbol id="i-edit" viewBox="0 0 24 24"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/></symbol>
   <symbol id="i-out" viewBox="0 0 24 24"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9"/></symbol>
+  <symbol id="i-clip" viewBox="0 0 24 24"><path d="m21 11-8.6 8.6a5.5 5.5 0 0 1-7.8-7.8l8.6-8.6a3.7 3.7 0 0 1 5.2 5.2l-8.6 8.6a1.8 1.8 0 0 1-2.6-2.6l7.9-7.9"/></symbol>
+  <symbol id="i-folder" viewBox="0 0 24 24"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></symbol>
+  <symbol id="i-file" viewBox="0 0 24 24"><path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/><path d="M14 3v6h6"/></symbol>
   <symbol id="i-trash" viewBox="0 0 24 24"><path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6"/></symbol>
   <symbol id="i-x" viewBox="0 0 24 24"><path d="M18 6 6 18M6 6l12 12"/></symbol>
   <symbol id="i-smile" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M8.5 14.5s1.3 1.8 3.5 1.8 3.5-1.8 3.5-1.8M9 9.5h.01M15 9.5h.01"/></symbol>
@@ -276,6 +314,12 @@
     <p id="joinError"></p>
   </form>
 </section>
+
+<div id="viewer" class="hidden">
+  <div class="bar"><span id="viewerName"></span><button id="viewerSave">Save</button>
+    <button class="iconBtn" id="viewerClose" title="Close"><svg class="i"><use href="#i-x"/></svg></button></div>
+  <img id="viewerImg" alt="">
+</div>
 
 <section id="chat" class="hidden">
   <aside>
@@ -339,9 +383,14 @@
     </div>
     <div id="messages"></div>
     <form id="composer" class="composer">
+      <div id="attachTray" class="hidden"></div>
       <textarea id="input" rows="1"></textarea>
       <div class="tools">
-        <span class="hint">Enter to send · Shift+Enter for a new line</span>
+        <button type="button" class="iconBtn" id="attachBtn" title="Attach photos or files"><svg class="i"><use href="#i-clip"/></svg></button>
+        <button type="button" class="iconBtn" id="folderBtn" title="Attach a folder"><svg class="i"><use href="#i-folder"/></svg></button>
+        <input type="file" id="fileInput" multiple hidden>
+        <input type="file" id="folderInput" webkitdirectory hidden>
+        <span class="hint">Enter to send · Shift+Enter for a new line · paste or drop files</span>
         <button type="submit" id="sendBtn" class="sendBtn" title="Send" disabled><svg class="i"><use href="#i-send"/></svg></button>
       </div>
     </form>
@@ -611,7 +660,9 @@
     }
     const text = document.createElement('div'); text.className = 'text'; text.textContent = m.text
     const rx = document.createElement('div'); rx.className = 'reactions'
-    body.append(text, rx)
+    body.append(text)
+    if (m.files) body.append(filesEl(m.files))
+    body.append(rx)
     const threads = !opts.thread && m.kind !== 'dm'
     if (threads) {
       const th = document.createElement('div'); th.className = 'threadLink hidden'
@@ -1067,26 +1118,281 @@
   $('menuBtn').addEventListener('click', () => $('chat').classList.add('drawer'))
   $('scrim').addEventListener('click', closeDrawer)
 
+  // ---- Attachments: pick / paste / drop, tray above the main composer, upload on send.
+  const MAX_FILE = 50 * 1024 * 1024
+  const PREVIEW_MAX = 15 * 1024 * 1024 // images up to this size load automatically
+  let attachments = [] // { name, mime, size, rel?, src: File | { path }, url? }
+
+  function sizeStr (n) {
+    if (n < 1024) return n + ' B'
+    if (n < 1024 * 1024) return Math.round(n / 1024) + ' KB'
+    return (n / 1024 / 1024).toFixed(n < 10 * 1024 * 1024 ? 1 : 0) + ' MB'
+  }
+
+  function addAttachments (list) {
+    for (const a of list) {
+      if (a.error || a.size > MAX_FILE) { addSys(`"${a.name}" is too big to send (max 50 MB).`); continue }
+      if (a.src instanceof Blob && (a.mime || '').startsWith('image/')) a.url = URL.createObjectURL(a.src)
+      attachments.push(a)
+    }
+    renderTray()
+  }
+  function fromFiles (files, relOf) {
+    return [...files].map(f => {
+      let name = f.name || 'file'
+      if (/^image\.(png|jpe?g|gif|webp)$/i.test(name)) { // pasted screenshots are all called "image.png"
+        name = 'image-' + new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19) + '.' + name.split('.').pop()
+      }
+      return { name, mime: f.type || 'application/octet-stream', size: f.size, rel: relOf ? relOf(f) : undefined, src: f }
+    })
+  }
+  function renderTray () {
+    const tray = $('attachTray')
+    tray.innerHTML = ''
+    tray.classList.toggle('hidden', !attachments.length)
+    attachments.forEach((a, i) => {
+      const chip = document.createElement('div')
+      chip.className = 'attach' + (a.url ? ' pic' : '')
+      if (a.url) { const img = document.createElement('img'); img.src = a.url; chip.append(img) }
+      const label = document.createElement('span'); label.className = 'name'
+      label.textContent = (a.rel ? a.rel : a.name) + ' · ' + sizeStr(a.size)
+      const x = iconBtn('iconBtn', 'Remove', '#i-x')
+      x.addEventListener('click', () => {
+        if (a.url) URL.revokeObjectURL(a.url)
+        attachments.splice(i, 1)
+        renderTray()
+      })
+      chip.append(label, x)
+      tray.append(chip)
+    })
+    $('input').dispatchEvent(new Event('input')) // refresh the send button
+  }
+
+  // Upload everything in the tray; returns file refs for the message (null if nothing).
+  async function takeAttachments () {
+    if (!attachments.length) return null
+    const list = attachments
+    attachments = []
+    renderTray()
+    const refs = []
+    for (const a of list) {
+      const src = a.src instanceof Blob ? new Uint8Array(await a.src.arrayBuffer()) : a.src
+      const ref = await chat.addFile(src, a.name, a.mime, a.rel)
+      if (a.url) URL.revokeObjectURL(a.url)
+      if (!ref || ref.error) { addSys(ref && ref.error ? ref.error : `Could not attach "${a.name}".`); continue }
+      refs.push(ref)
+    }
+    return refs.length ? refs : null
+  }
+
+  $('attachBtn').addEventListener('click', async () => {
+    if (chat.pickFiles) { // Android: native picker
+      const list = await chat.pickFiles()
+      addAttachments(list.map(f => ({ name: f.name, mime: f.mime || 'application/octet-stream', size: f.size || 0,
+        error: f.error, src: { path: f.path } })))
+    } else {
+      $('fileInput').click()
+    }
+  })
+  $('folderBtn').addEventListener('click', () => $('folderInput').click())
+  $('fileInput').addEventListener('change', e => { addAttachments(fromFiles(e.target.files)); e.target.value = '' })
+  $('folderInput').addEventListener('change', e => {
+    addAttachments(fromFiles(e.target.files, f => f.webkitRelativePath || undefined))
+    e.target.value = ''
+  })
+  // Paste screenshots / copied images (and copied files) straight into the message box.
+  $('input').addEventListener('paste', e => {
+    const files = e.clipboardData && e.clipboardData.files
+    if (files && files.length) { e.preventDefault(); addAttachments(fromFiles(files)) }
+  })
+  // Drag & drop files and whole folders onto the chat.
+  async function entryFiles (entry) {
+    if (entry.isFile) {
+      const f = await new Promise(resolve => entry.file(resolve, () => resolve(null)))
+      if (!f) return []
+      const rel = entry.fullPath.replace(/^\/+/, '')
+      return [{ f, rel: rel.includes('/') ? rel : undefined }]
+    }
+    if (!entry.isDirectory) return []
+    const reader = entry.createReader()
+    const out = []
+    for (;;) {
+      const batch = await new Promise(resolve => reader.readEntries(resolve, () => resolve([])))
+      if (!batch.length) break
+      for (const e of batch) out.push(...await entryFiles(e))
+    }
+    return out
+  }
+  document.addEventListener('dragover', e => { e.preventDefault() })
+  document.addEventListener('drop', async e => {
+    e.preventDefault() // never let Electron navigate to a dropped file
+    if ($('chat').classList.contains('hidden')) return
+    const items = [...(e.dataTransfer.items || [])].map(i => i.webkitGetAsEntry && i.webkitGetAsEntry()).filter(Boolean)
+    let found = []
+    if (items.length) for (const en of items) found.push(...await entryFiles(en))
+    else found = [...e.dataTransfer.files].map(f => ({ f }))
+    const relMap = new Map(found.map(x => [x.f, x.rel]))
+    addAttachments(fromFiles(found.map(x => x.f), f => relMap.get(f)))
+  })
+
+  // ---- Attachments in messages
+  const fileUrls = new Map() // hash -> object URL (or a pending promise)
+  function loadFileUrl (ref) {
+    if (!fileUrls.has(ref.h)) {
+      fileUrls.set(ref.h, chat.getFile(ref).then(bytes => {
+        if (!bytes) { fileUrls.delete(ref.h); return null }
+        return URL.createObjectURL(new Blob([bytes], { type: ref.m }))
+      }).catch(() => { fileUrls.delete(ref.h); return null }))
+    }
+    return fileUrls.get(ref.h)
+  }
+
+  async function saveRefs (refs, folder, btn) {
+    const label = btn.textContent
+    btn.disabled = true
+    btn.textContent = 'Saving…'
+    try {
+      const n = await chat.saveFiles(refs, folder)
+      btn.textContent = n ? (IS_PHONE ? 'Saved to Downloads ✓' : 'Saved ✓') : label
+    } catch (e) {
+      btn.textContent = label
+      addSys(String(e && e.message || e).replace(/^Error invoking remote method '[^']+': (Error: )?/, ''))
+    }
+    btn.disabled = false
+  }
+
+  function fileCard (icon, title, meta, button, onClick, h) {
+    const card = document.createElement('div')
+    card.className = 'fileCard'
+    if (h) card.dataset.h = h
+    card.innerHTML = `<svg class="i big"><use href="${icon}"/></svg>`
+    const info = document.createElement('div'); info.className = 'info'
+    const t = document.createElement('div'); t.className = 'fname'; t.textContent = title
+    const m = document.createElement('div'); m.className = 'meta'; m.textContent = meta
+    info.append(t, m)
+    const b = document.createElement('button'); b.type = 'button'; b.className = 'ghost'; b.textContent = button
+    b.addEventListener('click', e => { e.stopPropagation(); onClick(b) })
+    card.append(info, b)
+    return card
+  }
+
+  function imageTile (ref) {
+    const tile = document.createElement('div')
+    tile.className = 'imgTile'
+    tile.dataset.h = ref.h
+    const status = document.createElement('span'); status.className = 'status'
+    tile.append(status)
+    const show = async () => {
+      status.textContent = 'Loading…'
+      const url = await loadFileUrl(ref)
+      if (!url) { status.textContent = 'Not available right now (tap to retry)'; tile.classList.add('missing'); return }
+      tile.classList.remove('missing')
+      const img = document.createElement('img'); img.alt = ref.n
+      const stick = tile.closest('#messages') && nearBottom()
+      img.onload = () => { if (stick) messagesEl.scrollTop = messagesEl.scrollHeight }
+      img.src = url
+      tile.innerHTML = ''
+      tile.append(img)
+    }
+    tile.addEventListener('click', e => {
+      e.stopPropagation()
+      if (tile.querySelector('img')) openViewer(ref)
+      else show()
+    })
+    if (ref.s <= PREVIEW_MAX) show()
+    else status.textContent = ref.n + ' · ' + sizeStr(ref.s) + ' (tap to load)'
+    return tile
+  }
+
+  function filesEl (files) {
+    const box = document.createElement('div')
+    box.className = 'files'
+    const folders = new Map()
+    const loose = []
+    for (const f of files) {
+      if (f.p && f.p.includes('/')) {
+        const top = f.p.split('/')[0]
+        if (!folders.has(top)) folders.set(top, [])
+        folders.get(top).push(f)
+      } else loose.push(f)
+    }
+    const pics = loose.filter(f => f.m.startsWith('image/'))
+    if (pics.length) {
+      const grid = document.createElement('div'); grid.className = 'imgGrid'
+      for (const f of pics) grid.append(imageTile(f))
+      box.append(grid)
+    }
+    for (const f of loose.filter(f => !f.m.startsWith('image/'))) {
+      box.append(fileCard('#i-file', f.n, sizeStr(f.s), 'Download', b => saveRefs([f], null, b), f.h))
+    }
+    for (const [name, refs] of folders) {
+      const total = refs.reduce((a, r) => a + r.s, 0)
+      box.append(fileCard('#i-folder', name, refs.length + (refs.length === 1 ? ' file · ' : ' files · ') + sizeStr(total),
+        'Save folder', b => saveRefs(refs, name, b)))
+    }
+    return box
+  }
+
+  chat.on('file-progress', p => {
+    const pct = Math.round(p.got / p.total * 100) + '%'
+    document.querySelectorAll(`[data-h="${p.h}"]`).forEach(el => {
+      const s = el.querySelector('.status') || el.querySelector('.meta')
+      if (!s) return
+      if (s.dataset.orig === undefined) s.dataset.orig = s.textContent
+      s.textContent = p.got < p.total ? 'Downloading ' + pct : s.dataset.orig
+    })
+  })
+
+  // Full-size image viewer
+  let viewerRef = null
+  async function openViewer (ref) {
+    viewerRef = ref
+    const url = await loadFileUrl(ref)
+    if (!url) return
+    $('viewerImg').src = url
+    $('viewerName').textContent = ref.n + ' · ' + sizeStr(ref.s)
+    $('viewerSave').textContent = 'Save'
+    $('viewer').classList.remove('hidden')
+  }
+  function closeViewer () { $('viewer').classList.add('hidden'); $('viewerImg').removeAttribute('src') }
+  $('viewer').addEventListener('click', e => { if (e.target.id === 'viewer' || e.target.id === 'viewerImg') closeViewer() })
+  $('viewerClose').addEventListener('click', closeViewer)
+  $('viewerSave').addEventListener('click', () => saveRefs([viewerRef], null, $('viewerSave')))
+  document.addEventListener('keydown', e => { if (e.key === 'Escape') closeViewer() })
+
   // ---- Composers (main + thread). Phones: Enter is a new line, the Send button sends.
-  function setupComposer (form, box, btn, parentId) {
+  function setupComposer (form, box, btn, parentId, withFiles) {
     const autosize = () => {
       box.style.height = 'auto'
       box.style.height = Math.min(box.scrollHeight, 180) + 'px'
-      btn.disabled = !box.value.trim()
+      btn.disabled = !box.value.trim() && !(withFiles && attachments.length)
     }
+    let busy = false
     const sendIt = async () => {
       const text = box.value
-      if (!text.trim()) return
+      if (busy || (!text.trim() && !(withFiles && attachments.length))) return
+      busy = true
       box.value = ''
       autosize()
       const parent = parentId()
+      let files = null
+      if (withFiles && attachments.length) {
+        btn.disabled = true
+        box.placeholder = 'Sending files…'
+        files = await takeAttachments()
+        showChannelHeader() // restores the placeholder
+      }
+      busy = false
+      if (!text.trim() && !files) return
       let m
       if (!parent && isDm(currentCh)) {
-        m = await chat.sendDm(currentCh.slice(3), text)
+        m = await chat.sendDm(currentCh.slice(3), text, files || undefined)
         if (m && m.error) { addSys(m.error); box.value = text; autosize(); return }
       } else {
         const ch = parent ? chOf(byId.get(parent) || {}) : currentCh
-        m = await chat.send(text, parent ? { parent, ch } : { ch })
+        const extra = parent ? { parent, ch } : { ch }
+        if (files) extra.files = files
+        m = await chat.send(text, extra)
       }
       if (m) { addMsg(m, true); touchSession() }
     }
@@ -1097,7 +1403,7 @@
       if (e.key === 'Enter' && !e.shiftKey && !IS_PHONE) { e.preventDefault(); sendIt() }
     })
   }
-  setupComposer($('composer'), $('input'), $('sendBtn'), () => null)
+  setupComposer($('composer'), $('input'), $('sendBtn'), () => null, true)
   setupComposer($('threadComposer'), $('threadInput'), $('threadSend'), () => openThread)
 
   // ---- Xiaomi phones: nudge to turn on Autostart (needed to reconnect after a reboot).

@@ -293,7 +293,10 @@ public class YapService extends Service {
     String kind = m.optString("kind");
     if (!kind.isEmpty() && !kind.equals("dm")) return; // reactions / channel changes don't buzz the phone
     Person sender = new Person.Builder().setName(from).build();
-    String body = kind.equals("dm") ? "(direct message) " + m.optString("text", "") : m.optString("text", "");
+    String body = m.optString("text", "");
+    JSONArray files = m.optJSONArray("files");
+    if (body.isEmpty() && files != null) body = files.length() == 1 ? "📎 " + files.optJSONObject(0).optString("n", "a file") : "📎 " + files.length() + " files";
+    if (kind.equals("dm")) body = "(direct message) " + body;
     unread.add(new Notification.MessagingStyle.Message(body, m.optLong("ts", System.currentTimeMillis()), sender));
     while (unread.size() > 25) unread.remove(0);
 

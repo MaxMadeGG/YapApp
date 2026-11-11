@@ -8,7 +8,10 @@ contextBridge.exposeInMainWorld('chat', {
   checkInvite: code => ipcRenderer.invoke('invite:check', code),
   leave: () => ipcRenderer.invoke('leave'),
   send: (text, extra) => ipcRenderer.invoke('send', text, extra),
-  sendDm: (toName, text) => ipcRenderer.invoke('dm', toName, text),
+  sendDm: (toName, text, files) => ipcRenderer.invoke('dm', toName, text, files),
+  addFile: (bytes, name, mime, relPath) => ipcRenderer.invoke('file:add', bytes, name, mime, relPath),
+  getFile: ref => ipcRenderer.invoke('file:get', ref),
+  saveFiles: (refs, folder) => ipcRenderer.invoke('file:save', refs, folder),
   react: (target, emoji, on) => ipcRenderer.invoke('react', target, emoji, on),
   setChannel: (target, name, deleted) => ipcRenderer.invoke('channel:set', target, name, deleted),
   createChannel: name => ipcRenderer.invoke('channel:create', name),
@@ -17,7 +20,7 @@ contextBridge.exposeInMainWorld('chat', {
   getSettings: () => ipcRenderer.invoke('settings:get'),
   setSettings: changes => ipcRenderer.invoke('settings:set', changes),
   on: (channel, fn) => {
-    if (['message', 'history', 'peers', 'system', 'update-ready', 'room'].includes(channel)) {
+    if (['message', 'history', 'peers', 'system', 'update-ready', 'room', 'file-progress'].includes(channel)) {
       ipcRenderer.on(channel, (e, data) => fn(data))
     }
   }

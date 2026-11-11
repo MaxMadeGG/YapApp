@@ -32,7 +32,34 @@
     join: (name, invite) => call('join', name, invite),
     leave: () => call('leave'),
     send: (text, extra) => call('send', text, extra),
-    sendDm: (toName, text) => call('sendDm', toName, text),
+    sendDm: (toName, text, files) => call('sendDm', toName, text, files),
+    // src = { path } from pickFiles() (bytes never go through the WebView).
+    addFile: (src, name, mime, relPath) => call('addFileFromPath', src.path, name, mime, relPath),
+    getFile: async ref => {
+      const b64 = await call('getFile', ref)
+      if (!b64) return null
+      const bin = atob(b64)
+      const out = new Uint8Array(bin.length)
+      for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i)
+      return out
+    },
+    // Saved into Downloads/YapApp[/folder].
+    saveFiles: async (refs, folder) => {
+      let saved = 0
+      for (const ref of refs) {
+        const p = await call('exportFile', ref)
+        if (!p) continue
+        const rel = folder ? (ref.p || ref.n) : ref.n
+        if (window.YapNative.saveToDownloads(p, rel, ref.m)) saved++
+      }
+      if (!saved) throw new Error('Could not download (is anyone who has it online?)')
+      return saved
+    },
+    // Native picker; resolves to [{ path, name, mime, size }] (copied into the app's files).
+    pickFiles: () => new Promise(resolve => {
+      window.__yapPicked = list => { window.__yapPicked = null; resolve(list || []) }
+      window.YapNative.pickFiles()
+    }),
     react: (target, emoji, on) => call('react', target, emoji, on),
     setChannel: (target, name, deleted) => call('setChannel', target, name, deleted),
     createChannel: name => call('createChannel', name),
