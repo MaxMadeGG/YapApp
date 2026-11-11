@@ -10,7 +10,7 @@ const SYNC_BATCH = 200        // messages per 'history' packet
 const MAX_LINE = 16_000_000   // max bytes of one protocol line
 const MAX_TEXT = 4000
 const AUTH_TIMEOUT = 15000
-const SETTINGS_KEYS = ['name', 'invite', 'lastUsed']
+const SETTINGS_KEYS = ['name', 'invite', 'lastUsed', 'rooms'] // rooms = JSON list of remembered invites
 
 // ---- Crypto helpers (SHA-256 based, identical on every runtime) -------------
 function sha256 (...parts) {
@@ -307,7 +307,7 @@ function createCore ({ fs, dataDir, emit }) {
     for (const k of SETTINGS_KEYS) {
       if (!changes || !(k in changes)) continue
       if (changes[k] === null) delete s[k]
-      else s[k] = String(changes[k]).slice(0, 300)
+      else s[k] = String(changes[k]).slice(0, k === 'rooms' ? 20000 : 300)
     }
     writeJSON('settings.json', s)
   }

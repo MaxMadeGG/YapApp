@@ -5,6 +5,9 @@ const path = require('path')
 const fs = require('fs')
 const { createCore } = require('./core.js')
 
+// Test hook: YAPAPP_DATA=<dir> keeps settings + history out of the real profile.
+if (process.env.YAPAPP_DATA) app.setPath('userData', process.env.YAPAPP_DATA)
+
 let win = null
 
 function toUI (channel, data) {

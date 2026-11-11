@@ -8,87 +8,146 @@
 <style>
   :root {
     --bg: #1e1f24; --panel: #17181c; --line: #2c2e35; --text: #e6e6ea;
-    --muted: #8b8d97; --accent: #5b8cff; --input: #26282f;
+    --muted: #8b8d97; --accent: #5b8cff; --input: #26282f; --hover: #24262d;
+    --active: #2f4f9a; --online: #3ecf6e;
   }
   * { box-sizing: border-box; }
   html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text);
-    font: 14px/1.45 "Segoe UI", system-ui, sans-serif; }
+    font: 15px/1.46 "Segoe UI", system-ui, sans-serif; }
   .hidden { display: none !important; }
+  svg.i { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 2;
+    stroke-linecap: round; stroke-linejoin: round; flex: none; }
+  .iconBtn { background: none; border: 0; color: var(--muted); padding: 6px; border-radius: 6px;
+    cursor: pointer; display: inline-flex; align-items: center; justify-content: center; }
+  .iconBtn:hover { background: var(--hover); color: var(--text); filter: none; }
 
   /* Join screen */
   #join { height: 100%; display: flex; align-items: center; justify-content: center; }
   #join form { background: var(--panel); border: 1px solid var(--line); border-radius: 12px;
-    padding: 28px; width: 320px; display: flex; flex-direction: column; gap: 12px; }
-  #join h1 { margin: 0 0 4px; font-size: 20px; }
+    padding: 28px; width: 340px; display: flex; flex-direction: column; gap: 12px; }
+  #join .titleRow { display: flex; align-items: center; justify-content: space-between; }
+  #join h1 { margin: 0; font-size: 20px; }
   #join p { margin: 0 0 8px; color: var(--muted); font-size: 13px; }
   label { font-size: 12px; color: var(--muted); }
   input, textarea { width: 100%; background: var(--input); color: var(--text); border: 1px solid var(--line);
     border-radius: 8px; padding: 9px 11px; font: inherit; outline: none; }
-  input:focus, textarea:focus { border-color: var(--accent); }
+  input:focus { border-color: var(--accent); }
   button { background: var(--accent); color: white; border: 0; border-radius: 8px; padding: 9px 14px;
     font: inherit; font-weight: 600; cursor: pointer; }
   button:hover { filter: brightness(1.1); }
   button.ghost { background: transparent; color: var(--muted); border: 1px solid var(--line); }
-
-  /* Chat screen */
-  #chat { height: 100%; display: flex; }
-  aside { width: 210px; background: var(--panel); border-right: 1px solid var(--line);
-    display: flex; flex-direction: column; padding: 16px; gap: 6px; }
-  aside .roomRow { display: flex; align-items: flex-start; gap: 6px; }
-  aside .room { font-weight: 700; font-size: 16px; word-break: break-word; flex: 1; }
-  #renameBtn { background: none; border: 0; color: var(--muted); padding: 2px 4px; font-size: 14px; cursor: pointer; }
-  #renameBtn:hover { color: var(--text); }
-  #renameInput { font-weight: 700; font-size: 15px; padding: 4px 6px; }
-  aside .me { color: var(--muted); font-size: 12px; margin-bottom: 14px; }
-  aside h3 { font-size: 11px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); margin: 6px 0 4px; }
-  #peers { list-style: none; margin: 0; padding: 0; flex: 1; overflow-y: auto; }
-  #peers li { padding: 3px 0; display: flex; align-items: center; gap: 8px; }
-  #peers li::before { content: ""; width: 8px; height: 8px; border-radius: 50%; background: #3ecf6e; }
-  #peers li.none { color: var(--muted); font-style: italic; }
-  #peers li.none::before { background: var(--muted); }
-
-  main { flex: 1; display: flex; flex-direction: column; min-width: 0; }
-  #messages { flex: 1; overflow-y: auto; padding: 16px 20px; }
-  .msg { padding: 3px 0; }
-  .msg .head { display: flex; gap: 8px; align-items: baseline; margin-top: 10px; }
-  .msg .name { font-weight: 700; }
-  .msg .time { color: var(--muted); font-size: 11px; }
-  .msg .text { white-space: pre-wrap; word-wrap: break-word; }
-  .sys { color: var(--muted); font-size: 12px; font-style: italic; padding: 6px 0; }
-  .empty { color: var(--muted); text-align: center; margin-top: 30%; }
-
-  #updateBar { display: flex; align-items: center; gap: 12px; padding: 8px 16px;
-    background: #24365f; border-bottom: 1px solid var(--line); font-size: 13px; }
-  #updateBar span { flex: 1; }
-  #updateBar button { padding: 5px 12px; }
   #join .or { text-align: center; color: var(--muted); font-size: 12px; margin: 4px 0; }
   #join .row { display: flex; gap: 8px; }
   #join .row input { flex: 1; }
   #joinError { color: #ff7b7b; font-size: 13px; min-height: 18px; margin: 0; }
   #invitePreview { color: var(--muted); font-size: 12px; min-height: 16px; margin-top: -6px; }
-  #inviteBar { padding: 10px 16px; background: #1f3a2c; border-bottom: 1px solid var(--line); font-size: 13px; }
+
+  /* Chat screen: sidebar | main */
+  #chat { height: 100%; display: flex; }
+  aside { width: 260px; background: var(--panel); border-right: 1px solid var(--line);
+    display: flex; flex-direction: column; min-height: 0; }
+  .brand { display: flex; align-items: center; gap: 8px; padding: 14px 14px 12px 16px;
+    border-bottom: 1px solid var(--line); }
+  .brand .title { flex: 1; min-width: 0; }
+  .brand b { display: block; font-size: 17px; }
+  .brand small { display: block; color: var(--muted); font-size: 12px; white-space: nowrap;
+    overflow: hidden; text-overflow: ellipsis; }
+  .side { flex: 1; overflow-y: auto; padding: 10px 8px; }
+  .sectionHead { display: flex; align-items: center; justify-content: space-between;
+    color: var(--muted); font-size: 13px; font-weight: 600; padding: 10px 8px 4px; }
+  .sectionHead .iconBtn { padding: 3px; }
+  .item { display: flex; align-items: center; gap: 8px; padding: 5px 10px; border-radius: 6px;
+    color: var(--muted); cursor: pointer; min-width: 0; user-select: none; }
+  .item:hover { background: var(--hover); color: var(--text); }
+  .item.active { background: var(--active); color: #fff; font-weight: 600; }
+  .item .label { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .item .hash { width: 18px; text-align: center; font-size: 17px; opacity: .8; }
+  .item.static { cursor: default; }
+  .item.static:hover { background: none; color: var(--muted); }
+  .item .you { color: var(--muted); font-weight: 400; font-size: 13px; margin-left: 2px; }
+  .presence { position: relative; flex: none; }
+  .presence::after { content: ""; position: absolute; right: -4px; bottom: -4px; width: 8px; height: 8px;
+    border-radius: 50%; background: var(--online); border: 2px solid var(--panel); }
+  .lonely { color: var(--muted); font-style: italic; font-size: 13px; padding: 4px 10px; }
+  .sideFoot { border-top: 1px solid var(--line); padding: 8px; display: flex; align-items: center; gap: 4px; }
+  .sideFoot #version { flex: 1; color: var(--muted); font-size: 11px; padding-left: 8px; }
+
+  .avatar { width: 36px; height: 36px; border-radius: 8px; display: flex; align-items: center;
+    justify-content: center; font-weight: 700; color: #15161a; flex: none; font-size: 16px; }
+  .avatar.sm { width: 22px; height: 22px; border-radius: 5px; font-size: 12px; }
+  .avatar.xs { width: 24px; height: 24px; border-radius: 6px; font-size: 12px; border: 2px solid var(--bg); }
+
+  main { flex: 1; display: flex; flex-direction: column; min-width: 0; }
+  header { display: flex; align-items: center; gap: 8px; padding: 10px 14px 10px 18px;
+    border-bottom: 1px solid var(--line); min-height: 56px; }
+  #menuBtn { display: none; }
+  .roomTitle { flex: 1; min-width: 0; display: flex; align-items: center; gap: 6px; }
+  #roomLabel { font-weight: 700; font-size: 18px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    cursor: pointer; border-radius: 6px; padding: 2px 6px; }
+  #roomLabel:hover { background: var(--hover); }
+  #renameInput { font-weight: 700; font-size: 16px; padding: 4px 8px; max-width: 320px; }
+  #onlineStack { display: flex; align-items: center; gap: 6px; color: var(--muted); font-size: 13px;
+    border: 1px solid var(--line); border-radius: 8px; padding: 3px 8px 3px 6px; }
+  #onlineStack .faces { display: flex; }
+  #onlineStack .faces .avatar + .avatar { margin-left: -7px; }
+
+  #updateBar, #inviteBar { display: flex; flex-direction: column; gap: 6px; padding: 10px 18px;
+    border-bottom: 1px solid var(--line); font-size: 13px; }
+  #updateBar { flex-direction: row; align-items: center; gap: 12px; background: #24365f; }
+  #updateBar span { flex: 1; }
+  #inviteBar { background: #1f3a2c; }
   #inviteBar .top { display: flex; align-items: center; gap: 10px; }
   #inviteBar .top span { flex: 1; }
-  #inviteBar code { display: block; margin-top: 6px; padding: 6px 8px; background: var(--input); border-radius: 6px;
+  #inviteBar code { display: block; padding: 6px 8px; background: var(--input); border-radius: 6px;
     font: 12px Consolas, monospace; word-break: break-all; user-select: all; }
-  #inviteBar button { padding: 5px 12px; }
-  #version { color: var(--muted); font-size: 11px; text-align: center; margin-top: 4px; }
-  #composer { display: flex; gap: 10px; padding: 12px 16px; border-top: 1px solid var(--line); }
-  #composer textarea { resize: none; height: 42px; max-height: 140px; }
+  #updateBar button, #inviteBar button { padding: 5px 12px; }
 
-  /* Phones / narrow windows: sidebar becomes a compact header */
-  @media (max-width: 640px) {
+  #messages { flex: 1; overflow-y: auto; padding: 8px 0 12px; }
+  .day { display: flex; align-items: center; margin: 18px 0 6px; }
+  .day::before, .day::after { content: ""; flex: 1; border-top: 1px solid var(--line); }
+  .day span { border: 1px solid var(--line); border-radius: 999px; padding: 2px 14px; font-size: 13px;
+    font-weight: 600; background: var(--bg); }
+  .msg { display: flex; gap: 10px; padding: 2px 20px; position: relative; }
+  .msg:hover { background: #22242a; }
+  .msg.first { margin-top: 8px; padding-top: 6px; }
+  .msg .gutter { width: 36px; flex: none; }
+  .msg .gutter .stamp { display: none; color: var(--muted); font-size: 10px; text-align: right; padding-top: 4px; }
+  .msg:hover .gutter .stamp { display: block; }
+  .msg .body { min-width: 0; flex: 1; }
+  .msg .head { display: flex; gap: 8px; align-items: baseline; }
+  .msg .name { font-weight: 700; }
+  .msg .time { color: var(--muted); font-size: 12px; }
+  .msg .text { white-space: pre-wrap; word-wrap: break-word; }
+  .sys { color: var(--muted); font-size: 13px; font-style: italic; padding: 4px 20px 4px 66px; }
+  .empty { color: var(--muted); text-align: center; margin-top: 25vh; }
+  .empty b { display: block; color: var(--text); font-size: 20px; margin-bottom: 4px; }
+
+  #composer { margin: 0 18px 16px; border: 1px solid var(--line); border-radius: 10px; background: var(--input); }
+  #composer:focus-within { border-color: #4a4d57; }
+  #composer textarea { border: 0; background: none; resize: none; height: 44px; max-height: 180px; padding: 11px 14px 4px; }
+  #composer .tools { display: flex; align-items: center; gap: 8px; padding: 4px 8px 6px 14px; }
+  #composer .hint { flex: 1; color: var(--muted); font-size: 11px; }
+  #sendBtn { padding: 6px 10px; border-radius: 6px; display: inline-flex; }
+  #sendBtn:disabled { background: transparent; color: var(--muted); cursor: default; filter: none; }
+  #scrim { display: none; }
+
+  /* Phones / narrow windows: sidebar becomes a slide-out drawer */
+  @media (max-width: 700px) {
     #join { align-items: flex-start; padding: 16px; overflow-y: auto; }
     #join form { width: 100%; padding: 20px; }
-    #chat { flex-direction: column; }
-    aside { width: auto; flex-direction: row; flex-wrap: wrap; align-items: center;
-      padding: 8px 12px; gap: 6px 8px; border-right: 0; border-bottom: 1px solid var(--line); }
-    aside .roomRow { flex: 1 1 100%; align-items: center; }
-    aside .me, aside h3, #version { display: none; }
-    #peers { flex: 1 1 auto; display: flex; gap: 12px; overflow-x: auto; white-space: nowrap; font-size: 12px; }
-    aside button.ghost { padding: 5px 10px; font-size: 12px; }
-    #messages { padding: 8px 12px; }
-    #composer { padding: 8px 10px; }
+    aside { position: fixed; z-index: 20; top: 0; bottom: 0; left: 0; width: 82%; max-width: 300px;
+      transform: translateX(-100%); transition: transform .2s ease; }
+    #chat.drawer aside { transform: none; }
+    #chat.drawer #scrim { display: block; position: fixed; inset: 0; z-index: 10; background: rgba(0,0,0,.5); }
+    #menuBtn { display: inline-flex; }
+    header { padding: 8px 10px; min-height: 52px; }
+    #onlineStack .count { display: none; }
+    .msg { padding: 2px 12px; }
+    .sys { padding-left: 58px; }
+    #composer { margin: 0 8px 8px; display: flex; align-items: flex-end; }
+    #composer textarea { padding: 10px 12px; }
+    #composer .tools { padding: 4px 6px 6px 0; }
+    #composer .hint { display: none; }
     #updateBar, #inviteBar { padding: 8px 12px; }
     #inviteBar .top { flex-wrap: wrap; }
     #inviteBar .top span { flex: 1 1 100%; }
@@ -97,9 +156,22 @@
 </head>
 <body>
 
+<svg style="display:none" xmlns="http://www.w3.org/2000/svg">
+  <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
+  <symbol id="i-send" viewBox="0 0 24 24"><path d="M22 2 11 13M22 2l-7 20-4-9-9-4z"/></symbol>
+  <symbol id="i-menu" viewBox="0 0 24 24"><path d="M3 6h18M3 12h18M3 18h18"/></symbol>
+  <symbol id="i-invite" viewBox="0 0 24 24"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M19 8v6M22 11h-6"/></symbol>
+  <symbol id="i-edit" viewBox="0 0 24 24"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/></symbol>
+  <symbol id="i-out" viewBox="0 0 24 24"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9"/></symbol>
+  <symbol id="i-x" viewBox="0 0 24 24"><path d="M18 6 6 18M6 6l12 12"/></symbol>
+</svg>
+
 <section id="join">
   <form id="joinForm">
-    <h1>YapApp</h1>
+    <div class="titleRow">
+      <h1 id="joinTitle">YapApp</h1>
+      <button type="button" class="ghost hidden" id="backBtn">Back</button>
+    </div>
     <p>No server. Rooms are private: you can only get in with an invite code.</p>
     <label for="name">Your name</label>
     <input id="name" maxlength="40" autocomplete="off">
@@ -124,19 +196,34 @@
 
 <section id="chat" class="hidden">
   <aside>
-    <div class="roomRow">
-      <div class="room" id="roomLabel"></div>
-      <input id="renameInput" class="hidden" maxlength="40" autocomplete="off">
-      <button id="renameBtn" title="Rename room">✎</button>
+    <div class="brand">
+      <div class="title"><b>YapApp</b><small id="meLabel"></small></div>
+      <button class="iconBtn" id="logoutBtn" title="Log out"><svg class="i"><use href="#i-out"/></svg></button>
     </div>
-    <div class="me" id="meLabel"></div>
-    <h3>Online</h3>
-    <ul id="peers"></ul>
-    <button class="ghost" id="inviteBtn">Invite people</button>
-    <button class="ghost" id="leaveBtn">Leave room</button>
-    <div id="version"></div>
+    <div class="side">
+      <div class="sectionHead">Rooms
+        <button class="iconBtn" id="addRoomBtn" title="Join or create a room"><svg class="i"><use href="#i-plus"/></svg></button>
+      </div>
+      <div id="roomList"></div>
+      <div class="sectionHead">Online</div>
+      <div id="peers"></div>
+    </div>
+    <div class="sideFoot">
+      <div id="version"></div>
+      <button class="ghost" id="leaveBtn" title="Remove this room from your list">Leave room</button>
+    </div>
   </aside>
+  <div id="scrim"></div>
   <main>
+    <header>
+      <button class="iconBtn" id="menuBtn" title="Rooms"><svg class="i"><use href="#i-menu"/></svg></button>
+      <div class="roomTitle">
+        <div id="roomLabel" title="Click to rename"></div>
+        <input id="renameInput" class="hidden" maxlength="40" autocomplete="off">
+      </div>
+      <div id="onlineStack" title="Online now"><div class="faces"></div><span class="count"></span></div>
+      <button class="iconBtn" id="inviteBtn" title="Invite people"><svg class="i"><use href="#i-invite"/></svg></button>
+    </header>
     <div id="updateBar" class="hidden">
       <span id="updateText"></span>
       <button id="updateBtn">Restart to update</button>
@@ -146,14 +233,17 @@
       <div class="top">
         <span>Share this invite code with people you want in the room. Anyone who has it can join, so only send it privately.</span>
         <button id="copyInvite">Copy</button>
-        <button class="ghost" id="closeInvite">Close</button>
+        <button class="iconBtn" id="closeInvite" title="Close"><svg class="i"><use href="#i-x"/></svg></button>
       </div>
       <code id="inviteCode"></code>
     </div>
     <div id="messages"></div>
     <form id="composer">
-      <textarea id="input" placeholder="Message… (Enter to send, Shift+Enter for new line)"></textarea>
-      <button type="submit">Send</button>
+      <textarea id="input" rows="1"></textarea>
+      <div class="tools">
+        <span class="hint">Enter to send · Shift+Enter for a new line</span>
+        <button type="submit" id="sendBtn" title="Send" disabled><svg class="i"><use href="#i-send"/></svg></button>
+      </div>
     </form>
   </main>
 </section>
@@ -161,9 +251,10 @@
 <script>
   const $ = id => document.getElementById(id)
   const messagesEl = $('messages')
-  let lastName = null
+  const IS_PHONE = !!window.YapNative
+  const GROUP_MS = 5 * 60 * 1000 // follow-ups within 5 min from the same person share one header
 
-  // Settings are kept by the main process in settings.json (see main.js).
+  // Settings are kept by the host in settings.json (see core.js).
   let settings = {}
   function store (k, v) { settings[k] = v; chat.setSettings({ [k]: v }) }
   function load (k) { return settings[k] || '' }
@@ -173,47 +264,109 @@
   const SESSION_DAYS = 30
   function touchSession () { store('lastUsed', String(Date.now())) }
 
+  // ---- Remembered rooms (sidebar). Keyed by the invite's secret part, because a
+  // rename changes the name part of the invite but not the room.
+  let rooms = []          // [{ invite, name }]
+  let current = null      // key of the room we're in
+  let myName = ''
+  const keyOf = invite => String(invite).split('-')[1] || invite
+  function saveRooms () { store('rooms', JSON.stringify(rooms)) }
+  function loadRooms () {
+    try { rooms = JSON.parse(load('rooms') || '[]') } catch { rooms = [] }
+    if (!Array.isArray(rooms)) rooms = []
+    const inv = load('invite') // older versions remembered just one room
+    if (inv && !rooms.some(r => keyOf(r.invite) === keyOf(inv))) rooms.push({ invite: inv, name: '' })
+  }
+  function rememberRoom (invite, name) {
+    const k = keyOf(invite)
+    const r = rooms.find(r => keyOf(r.invite) === k)
+    if (r) { r.invite = invite; r.name = name } else rooms.push({ invite, name })
+    saveRooms()
+    renderRooms()
+  }
+  function renderRooms () {
+    const box = $('roomList')
+    box.innerHTML = ''
+    for (const r of rooms) {
+      const div = document.createElement('div')
+      div.className = 'item' + (keyOf(r.invite) === current ? ' active' : '')
+      const h = document.createElement('span'); h.className = 'hash'; h.textContent = '#'
+      const l = document.createElement('span'); l.className = 'label'; l.textContent = r.name || 'room'
+      div.append(h, l)
+      div.addEventListener('click', () => {
+        closeDrawer()
+        if (keyOf(r.invite) !== current) enterRoom(myName, r.invite, false)
+      })
+      box.append(div)
+    }
+  }
+
+  // ---- Helpers
   function colorFor (name) {
-    let h = 0
-    for (const c of name) h = (h * 31 + c.charCodeAt(0)) % 360
-    return `hsl(${h}, 70%, 68%)`
+    let h = 2166136261 // FNV-1a, then golden-ratio spread so similar names get distinct hues
+    for (const c of name) { h ^= c.charCodeAt(0); h = Math.imul(h, 16777619) }
+    return `hsl(${Math.round(((h >>> 0) * 0.618033988749895 % 1) * 360)}, 62%, 66%)`
   }
-
-  function fmtTime (ts) {
-    const d = new Date(ts)
-    const today = new Date().toDateString() === d.toDateString()
-    const t = d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-    return today ? t : d.toLocaleDateString() + ' ' + t
+  function avatar (name, cls) {
+    const a = document.createElement('div')
+    a.className = 'avatar' + (cls ? ' ' + cls : '')
+    a.style.background = colorFor(name)
+    a.textContent = (name.trim()[0] || '?').toUpperCase()
+    return a
   }
-
+  const timeOf = ts => new Date(ts).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })
+  function dayLabel (ts) {
+    const d = new Date(ts), now = new Date()
+    const yest = new Date(now); yest.setDate(now.getDate() - 1)
+    if (d.toDateString() === now.toDateString()) return 'Today'
+    if (d.toDateString() === yest.toDateString()) return 'Yesterday'
+    return d.toLocaleDateString([], { weekday: 'long', month: 'long', day: 'numeric',
+      year: d.getFullYear() === now.getFullYear() ? undefined : 'numeric' })
+  }
   function nearBottom () {
     return messagesEl.scrollHeight - messagesEl.scrollTop - messagesEl.clientHeight < 80
   }
 
+  // ---- Messages
+  let last = null // { name, ts } of the previous message, for grouping + day dividers
+
   function addMsg (m, forceScroll) {
     const stick = forceScroll || nearBottom()
     messagesEl.querySelector('.empty')?.remove()
+    const newDay = !last || new Date(last.ts).toDateString() !== new Date(m.ts).toDateString()
+    if (newDay) {
+      const d = document.createElement('div')
+      d.className = 'day'
+      const s = document.createElement('span'); s.textContent = dayLabel(m.ts)
+      d.append(s)
+      messagesEl.append(d)
+    }
+    const grouped = !newDay && last && last.name === m.name && m.ts - last.ts < GROUP_MS
     const div = document.createElement('div')
-    div.className = 'msg'
-    if (m.name !== lastName) {
-      const head = document.createElement('div')
-      head.className = 'head'
-      const n = document.createElement('span')
-      n.className = 'name'
-      n.textContent = m.name
-      n.style.color = colorFor(m.name)
-      const t = document.createElement('span')
-      t.className = 'time'
-      t.textContent = fmtTime(m.ts)
+    div.className = 'msg' + (grouped ? '' : ' first')
+    const gutter = document.createElement('div')
+    gutter.className = 'gutter'
+    const body = document.createElement('div')
+    body.className = 'body'
+    if (grouped) {
+      const st = document.createElement('div'); st.className = 'stamp'; st.textContent = timeOf(m.ts)
+      gutter.append(st)
+    } else {
+      gutter.append(avatar(m.name))
+      const head = document.createElement('div'); head.className = 'head'
+      const n = document.createElement('span'); n.className = 'name'; n.textContent = m.name
+      const t = document.createElement('span'); t.className = 'time'; t.textContent = timeOf(m.ts)
+      t.title = new Date(m.ts).toLocaleString()
       head.append(n, t)
-      div.append(head)
+      body.append(head)
     }
     const text = document.createElement('div')
     text.className = 'text'
     text.textContent = m.text
-    div.append(text)
+    body.append(text)
+    div.append(gutter, body)
     messagesEl.append(div)
-    lastName = m.name
+    last = { name: m.name, ts: m.ts }
     if (stick) messagesEl.scrollTop = messagesEl.scrollHeight
   }
 
@@ -222,17 +375,18 @@
     div.className = 'sys'
     div.textContent = text
     messagesEl.append(div)
-    lastName = null
+    if (last) last = { name: null, ts: last.ts } // next message gets its own header
     if (nearBottom()) messagesEl.scrollTop = messagesEl.scrollHeight
   }
 
   function renderHistory (list) {
     messagesEl.innerHTML = ''
-    lastName = null
+    last = null
     if (!list.length) {
       const e = document.createElement('div')
       e.className = 'empty'
-      e.textContent = 'No messages yet. Say hi!'
+      const b = document.createElement('b'); b.textContent = $('roomLabel').textContent
+      e.append(b, 'This is the very beginning of the room. Say hi!')
       messagesEl.append(e)
       return
     }
@@ -240,31 +394,51 @@
   }
 
   chat.on('history', renderHistory)
+  // Keep the newest message in view when the list resizes (phone keyboard, composer growing).
+  let wasAtBottom = true
+  messagesEl.addEventListener('scroll', () => { wasAtBottom = nearBottom() })
+  new ResizeObserver(() => { if (wasAtBottom) messagesEl.scrollTop = messagesEl.scrollHeight }).observe(messagesEl)
   chat.on('message', m => addMsg(m))
   chat.on('system', addSys)
-  chat.on('peers', list => {
-    const ul = $('peers')
-    ul.innerHTML = ''
-    if (!list.length) {
-      const li = document.createElement('li')
-      li.className = 'none'
-      li.textContent = 'Looking for peers…'
-      ul.append(li)
-    }
-    for (const n of list) {
-      const li = document.createElement('li')
-      li.textContent = n
-      ul.append(li)
-    }
-  })
 
+  // ---- Who's online (sidebar list + header faces)
+  function renderPeers (list) {
+    const box = $('peers')
+    box.innerHTML = ''
+    const row = (name, you) => {
+      const div = document.createElement('div')
+      div.className = 'item static'
+      const p = document.createElement('span'); p.className = 'presence'
+      p.append(avatar(name, 'sm'))
+      const l = document.createElement('span'); l.className = 'label'; l.textContent = name + ' '
+      if (you) { const y = document.createElement('span'); y.className = 'you'; y.textContent = 'you'; l.append(y) }
+      div.append(p, l)
+      box.append(div)
+    }
+    if (myName) row(myName, true)
+    for (const n of list) row(n, false)
+    if (!list.length) {
+      const d = document.createElement('div'); d.className = 'lonely'; d.textContent = 'Looking for others…'
+      box.append(d)
+    }
+    const faces = $('onlineStack').querySelector('.faces')
+    faces.innerHTML = ''
+    const everyone = [myName, ...list].filter(Boolean)
+    for (const n of everyone.slice(0, 3)) faces.append(avatar(n, 'xs'))
+    $('onlineStack').querySelector('.count').textContent = everyone.length
+    $('onlineStack').title = everyone.join(', ') + ' online'
+  }
+  chat.on('peers', renderPeers)
+
+  // ---- Room header, rename, invite
   function showError (text) { $('joinError').textContent = text || '' }
 
-  // Room name + its current invite code (renames come from us or from peers).
   function showRoom (info) {
     $('roomLabel').textContent = '# ' + info.room
     $('inviteCode').textContent = info.invite
+    $('input').placeholder = 'Message #' + info.room
     store('invite', info.invite) // same secret, newest name
+    rememberRoom(info.invite, info.room)
   }
   chat.on('room', showRoom)
 
@@ -272,7 +446,6 @@
     const input = $('renameInput')
     input.value = $('roomLabel').textContent.replace(/^# /, '')
     $('roomLabel').classList.add('hidden')
-    $('renameBtn').classList.add('hidden')
     input.classList.remove('hidden')
     input.focus(); input.select()
   }
@@ -281,35 +454,56 @@
     if (input.classList.contains('hidden')) return
     input.classList.add('hidden')
     $('roomLabel').classList.remove('hidden')
-    $('renameBtn').classList.remove('hidden')
     const name = input.value.trim()
     if (save && name) {
       const info = await chat.renameRoom(name)
       if (info) showRoom(info)
     }
   }
-  $('renameBtn').addEventListener('click', startRename)
-  $('roomLabel').addEventListener('dblclick', startRename)
+  $('roomLabel').addEventListener('click', startRename)
   $('renameInput').addEventListener('keydown', e => {
     if (e.key === 'Enter') { e.preventDefault(); finishRename(true) }
     if (e.key === 'Escape') { e.preventDefault(); finishRename(false) }
   })
   $('renameInput').addEventListener('blur', () => finishRename(true))
 
+  $('inviteBtn').addEventListener('click', () => $('inviteBar').classList.toggle('hidden'))
+  $('closeInvite').addEventListener('click', () => $('inviteBar').classList.add('hidden'))
+  $('copyInvite').addEventListener('click', async () => {
+    await chat.copy($('inviteCode').textContent)
+    $('copyInvite').textContent = 'Copied!'
+    setTimeout(() => { $('copyInvite').textContent = 'Copy' }, 1500)
+  })
+
+  // ---- Entering rooms / join screen
   async function enterRoom (name, invite, showInvite) {
     const res = await chat.join(name, invite)
     if (!res.ok) { showError(res.error); return false }
     showError('')
-    store('name', name); store('invite', invite)
+    myName = name
+    current = keyOf(invite)
+    store('name', name)
     touchSession()
     showRoom(res)
-    $('meLabel').textContent = 'you are ' + name
+    $('meLabel').textContent = name
     $('inviteBar').classList.toggle('hidden', !showInvite)
     $('join').classList.add('hidden')
     $('chat').classList.remove('hidden')
-    $('peers').innerHTML = '<li class="none">Looking for peers…</li>'
-    $('input').focus()
+    renderPeers([])
+    messagesEl.scrollTop = messagesEl.scrollHeight // history arrived while the chat was still hidden
+    if (!IS_PHONE) $('input').focus()
     return true
+  }
+
+  function showJoin () {
+    $('name').value = load('name')
+    $('invite').value = ''
+    $('invitePreview').textContent = ''
+    $('newRoom').value = ''
+    showError('')
+    $('backBtn').classList.toggle('hidden', !current)
+    $('chat').classList.add('hidden')
+    $('join').classList.remove('hidden')
   }
 
   function needName () {
@@ -340,67 +534,91 @@
   $('invite').addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); $('joinBtn').click() } })
   $('newRoom').addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); $('createBtn').click() } })
   $('joinForm').addEventListener('submit', e => e.preventDefault())
-
-  $('inviteBtn').addEventListener('click', () => $('inviteBar').classList.toggle('hidden'))
-  $('closeInvite').addEventListener('click', () => $('inviteBar').classList.add('hidden'))
-  $('copyInvite').addEventListener('click', async () => {
-    await chat.copy($('inviteCode').textContent)
-    $('copyInvite').textContent = 'Copied!'
-    setTimeout(() => { $('copyInvite').textContent = 'Copy' }, 1500)
+  $('backBtn').addEventListener('click', () => {
+    $('join').classList.add('hidden')
+    $('chat').classList.remove('hidden')
   })
 
+  $('addRoomBtn').addEventListener('click', () => { closeDrawer(); showJoin() })
+
+  // Leave = drop this room from the list and go to the next one (or the join screen).
   $('leaveBtn').addEventListener('click', async () => {
+    const leaving = current
+    rooms = rooms.filter(r => keyOf(r.invite) !== leaving)
+    saveRooms()
     await chat.leave()
-    forget('lastUsed') // leaving = log out; name and invite stay pre-filled
-    $('name').value = load('name')
-    $('invite').value = load('invite')
-    $('invite').dispatchEvent(new Event('input'))
-    $('chat').classList.add('hidden')
-    $('join').classList.remove('hidden')
+    current = null
+    closeDrawer()
+    if (rooms.length && await enterRoom(myName, rooms[0].invite, false)) return
+    forget('invite')
+    renderRooms()
+    showJoin()
   })
+
+  // Log out = disconnect and forget the login; the room list stays for next time.
+  $('logoutBtn').addEventListener('click', async () => {
+    await chat.leave()
+    forget('lastUsed')
+    current = null
+    closeDrawer()
+    showJoin()
+    if (rooms.length) $('invite').value = rooms[0].invite
+    $('invite').dispatchEvent(new Event('input'))
+  })
+
+  // ---- Phone drawer
+  function closeDrawer () { $('chat').classList.remove('drawer') }
+  $('menuBtn').addEventListener('click', () => $('chat').classList.add('drawer'))
+  $('scrim').addEventListener('click', closeDrawer)
+
+  // ---- Composer
+  const input = $('input')
+  function autosize () {
+    input.style.height = 'auto'
+    input.style.height = Math.min(input.scrollHeight, 180) + 'px'
+    $('sendBtn').disabled = !input.value.trim()
+  }
+  input.addEventListener('input', autosize)
 
   async function sendInput () {
-    const input = $('input')
     const text = input.value
     if (!text.trim()) return
     input.value = ''
+    autosize()
     const m = await chat.send(text)
     if (m) { addMsg(m, true); touchSession() }
   }
 
-  $('composer').addEventListener('submit', e => { e.preventDefault(); sendInput() })
+  $('composer').addEventListener('submit', e => { e.preventDefault(); sendInput(); if (IS_PHONE) input.focus() })
   // Phones: Enter is a new line and the Send button sends (like other chat apps).
-  const IS_PHONE = !!window.YapNative
-  if (IS_PHONE) {
-    $('input').placeholder = 'Message…'
-    $('input').setAttribute('enterkeyhint', 'enter')
-  }
-  $('input').addEventListener('keydown', e => {
+  if (IS_PHONE) input.setAttribute('enterkeyhint', 'enter')
+  input.addEventListener('keydown', e => {
     if (e.key === 'Enter' && !e.shiftKey && !IS_PHONE) { e.preventDefault(); sendInput() }
   })
 
-  // Self-update: main process downloads in the background, we offer a restart.
-  chat.version().then(v => { $('version').textContent = 'YapApp v' + v })
+  // ---- Self-update: the host downloads in the background, we offer a restart.
+  chat.version().then(v => { $('version').textContent = 'v' + v })
   chat.on('update-ready', v => {
-    const android = !!window.YapNative
-    $('updateText').textContent = android
+    $('updateText').textContent = IS_PHONE
       ? `YapApp ${v} is available.`
       : `YapApp ${v} is ready. It also installs automatically when you close the app.`
-    $('updateBtn').textContent = android ? 'Install update' : 'Restart to update'
+    $('updateBtn').textContent = IS_PHONE ? 'Install update' : 'Restart to update'
     $('updateBar').classList.remove('hidden')
   })
   $('updateBtn').addEventListener('click', () => chat.installUpdate())
   $('updateLater').addEventListener('click', () => $('updateBar').classList.add('hidden'))
 
-  // Startup: rejoin the remembered room, or ask again if the login expired.
+  // ---- Startup: rejoin the remembered room, or ask again if the login expired.
   ;(async function startup () {
     settings = await chat.getSettings()
+    loadRooms()
+    renderRooms()
     const name = load('name'), invite = load('invite')
     const lastUsed = Number(load('lastUsed')) || 0
     const fresh = Date.now() - lastUsed < SESSION_DAYS * 24 * 3600 * 1000
     if (name && invite && fresh && await enterRoom(name, invite, false)) return
-    if (lastUsed && !fresh) { forget('name'); forget('invite'); forget('lastUsed') }
-    $('name').value = load('name')
+    if (lastUsed && !fresh) { forget('name'); forget('lastUsed') }
+    showJoin()
     $('invite').value = load('invite')
     $('invite').dispatchEvent(new Event('input'))
   })()

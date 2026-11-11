@@ -33,7 +33,17 @@ README.md has install/build details; this file is "where things stand".
    design), encrypted local history.
 - Decided: keep invite-code login + 30-day expiry as is (no email verification - would need a server).
 
+## UI (2026-11-11 redesign, layout inspired by Slack, own colours)
+- Sidebar: Rooms list (settings key `rooms` = JSON [{invite,name}], keyed by invite secret part since renames
+  change the name part) + Online list; header with room name (click = rename), online faces, invite button;
+  day dividers, avatars, 5-min message grouping; phones get a slide-out drawer (<=700px).
+- Only ONE room is connected at a time (core limitation) - switching rooms = leave + join; notifications only
+  for the active room. Leave room = drop from list; log-out icon = forget login, keep list.
+- Ideas next: reactions, threads (need protocol additions), unread badges for other rooms (needs multi-room core).
+
 ## Gotchas
+- TEST WITH `YAPAPP_DATA=<dir>` (main.js) - otherwise the dev app uses the user's REAL settings/history
+  (%APPDATA%/YapApp; setting APPDATA does NOT redirect Electron).
 - Bare Kit pinned v2.5.5 + bare-pack/bare-link ^1 (`--needs libbare-kit.so`); worklet global is `BareKit.IPC`.
 - npm 11 here blocks install scripts: Electron binary needs `node node_modules/electron/install.js` (start.bat does it).
 - Electron localStorage isn't flushed on quit - persistent state goes in `settings.json` via core.
