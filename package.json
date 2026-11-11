@@ -35,8 +35,8 @@
       "preload.js",
       "index.html",
       "package.json",
-      "!node_modules/**/prebuilds/{android,darwin,ios}*/**",
-      "core.js"
+      "core.js",
+      "!node_modules/**/prebuilds/{android,darwin,ios}*/**"
     ],
     "directories": {
       "output": "release"
@@ -44,6 +44,14 @@
     "win": {
       "target": [
         "nsis"
+      ],
+      "files": [
+        "main.js",
+        "preload.js",
+        "index.html",
+        "package.json",
+        "core.js",
+        "!node_modules/**/prebuilds/{linux,darwin,android,ios,win32-arm64}*/**"
       ]
     },
     "nsis": {
@@ -58,11 +66,27 @@
         "deb"
       ],
       "category": "Network",
-      "artifactName": "YapApp-${version}.${ext}"
+      "artifactName": "YapApp-${version}.${ext}",
+      "files": [
+        "main.js",
+        "preload.js",
+        "index.html",
+        "package.json",
+        "core.js",
+        "!node_modules/**/prebuilds/{win32,darwin,android,ios,linux-arm64}*/**"
+      ]
     },
     "publish": {
       "provider": "generic",
       "url": "https://github.com/MaxMadeGG/YapApp/releases/download/latest"
-    }
+    },
+    "compression": "maximum",
+    "electronLanguages": [
+      "en-US",
+      "fr",
+      "cs",
+      "sk",
+      "de"
+    ]
   }
 }
