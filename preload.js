@@ -11,6 +11,7 @@ contextBridge.exposeInMainWorld('chat', {
   sendDm: (toName, text, files) => ipcRenderer.invoke('dm', toName, text, files),
   addFile: (bytes, name, mime, relPath) => ipcRenderer.invoke('file:add', bytes, name, mime, relPath),
   getFile: ref => ipcRenderer.invoke('file:get', ref),
+  setPicture: (kind, pic) => ipcRenderer.invoke('picture:set', kind, pic),
   saveFiles: (refs, folder) => ipcRenderer.invoke('file:save', refs, folder),
   react: (target, emoji, on) => ipcRenderer.invoke('react', target, emoji, on),
   setChannel: (target, name, deleted) => ipcRenderer.invoke('channel:set', target, name, deleted),

@@ -47,6 +47,8 @@ const methods = {
     try { fs.unlinkSync(p) } catch {}
     return core.addFile(data, name, mime, relPath)
   },
+  addFileB64: (b64, name, mime, relPath) => core.addFile(b64, name, mime, relPath), // small things (pictures)
+  setPicture: (kind, pic) => core.setPicture(kind, pic),
   getFile: async ref => {
     const b = await core.getFile(ref)
     return b ? b4a.toString(b, 'base64') : null

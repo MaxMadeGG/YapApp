@@ -34,7 +34,13 @@
     send: (text, extra) => call('send', text, extra),
     sendDm: (toName, text, files) => call('sendDm', toName, text, files),
     // src = { path } from pickFiles() (bytes never go through the WebView).
-    addFile: (src, name, mime, relPath) => call('addFileFromPath', src.path, name, mime, relPath),
+    addFile: (src, name, mime, relPath) => {
+      if (src && src.path) return call('addFileFromPath', src.path, name, mime, relPath)
+      let bin = '' // small byte arrays (resized pictures) go as base64
+      for (let i = 0; i < src.length; i += 0x8000) bin += String.fromCharCode.apply(null, src.subarray(i, i + 0x8000))
+      return call('addFileB64', btoa(bin), name, mime, relPath)
+    },
+    setPicture: (kind, pic) => call('setPicture', kind, pic),
     getFile: async ref => {
       const b64 = await call('getFile', ref)
       if (!b64) return null

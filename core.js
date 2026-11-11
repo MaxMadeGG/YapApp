@@ -14,7 +14,7 @@ const MAX_FILE = 50 * 1024 * 1024 // per attached file
 const MAX_FILES = 50              // per message
 const CHUNK = 256 * 1024          // file transfer piece size
 const WANT_TIMEOUT = 60000        // give up fetching a file after this long without progress
-const SETTINGS_KEYS = ['name', 'invite', 'lastUsed', 'rooms'] // rooms = JSON list of remembered invites
+const SETTINGS_KEYS = ['name', 'invite', 'lastUsed', 'rooms', 'pfp'] // rooms = JSON list of remembered invites
 
 // ---- Crypto helpers (SHA-256 based, identical on every runtime) -------------
 function sha256 (...parts) {
@@ -138,6 +138,8 @@ function validMsg (m) {
     return isId(m.target) && typeof m.chName === 'string' && !!cleanChannel(m.chName) && typeof m.deleted === 'boolean'
   }
   if (m.kind === 'key') return isHex(m.pk, 64)
+  // Profile picture of the author / picture of the room: { pic: file ref or null }, newest wins.
+  if (m.kind === 'profile' || m.kind === 'roompic') return m.pic === null || !!cleanFiles([m.pic])
   if (m.kind === 'dm') {
     return isHex(m.from, 64) && typeof m.toName === 'string' && m.toName.length > 0 && m.toName.length <= 40 &&
       validBoxes(m.boxes)
@@ -188,6 +190,7 @@ function createCore ({ fs, dataDir, emit }) {
       if (m.kind === 'react') Object.assign(e, { kind: 'react', target: m.target, emoji: m.emoji, on: m.on })
       if (m.kind === 'chan') Object.assign(e, { kind: 'chan', target: m.target, chName: cleanChannel(m.chName), deleted: m.deleted })
       if (m.kind === 'key') Object.assign(e, { kind: 'key', pk: m.pk })
+      if (m.kind === 'profile' || m.kind === 'roompic') Object.assign(e, { kind: m.kind, pic: m.pic ? cleanFiles([m.pic])[0] : null })
       if (m.kind === 'dm') Object.assign(e, { kind: 'dm', toName: m.toName.slice(0, 40), from: m.from, boxes: m.boxes })
       history.push(e)
       added = true
@@ -552,6 +555,14 @@ function createCore ({ fs, dataDir, emit }) {
   }
   function createChannel (chName) { return setChannel(newId(), chName, false) }
 
+  // Pictures: pic = a file ref from addFile (an image) or null to remove.
+  function setPicture (kind, pic) {
+    if (!me || (kind !== 'profile' && kind !== 'roompic')) return null
+    const ref = pic ? (cleanFiles([pic]) || [])[0] : null
+    if (pic && !ref) return null
+    return publish({ id: newId(), name: me.name, text: '', ts: Date.now(), kind, pic: ref })
+  }
+
   function react (target, emoji, on) {
     emoji = String(emoji).slice(0, 16)
     if (!me || !isId(target) || !emoji) return null
@@ -577,7 +588,7 @@ function createCore ({ fs, dataDir, emit }) {
     for (const k of SETTINGS_KEYS) {
       if (!changes || !(k in changes)) continue
       if (changes[k] === null) delete s[k]
-      else s[k] = String(changes[k]).slice(0, k === 'rooms' ? 20000 : 300)
+      else s[k] = String(changes[k]).slice(0, k === 'rooms' ? 40000 : 1000)
     }
     writeJSON('settings.json', s)
   }
@@ -603,7 +614,7 @@ function createCore ({ fs, dataDir, emit }) {
     }
   }
 
-  return { join, leave, send, sendDm, addFile, getFile, react, setChannel, createChannel, renameRoom, createInvite: makeInvite, checkInvite, getSettings, setSettings, debugInfo }
+  return { join, leave, send, sendDm, addFile, getFile, setPicture, react, setChannel, createChannel, renameRoom, createInvite: makeInvite, checkInvite, getSettings, setSettings, debugInfo }
 }
 
 module.exports = { createCore, parseInvite, makeInvite, hmacSha256, hkdf32 }

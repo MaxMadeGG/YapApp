@@ -67,6 +67,12 @@ README.md has install/build details; this file is "where things stand".
   copies into files/import (no bytes through the WebView), saves via MediaStore into Downloads/YapApp[/folder].
   Images <=15 MB auto-preview; viewer overlay. Verified: 2 desktop instances (paste, file bytes, folder paths, DM
   image) + on the phone add/get/save (picker itself needs a human tap - not verified).
+- Emojis + pictures (2026-11-11): emoji panel (~1230 emojis in EMOJI_SETS, recent tab in localStorage; emojis the
+  device font can't draw are hidden via a canvas check - Win10 lacks ~54). Quick reaction bar has "+" -> panel.
+  Pictures = history entries kind:'profile' (author's avatar) / kind:'roompic' {pic: file ref|null}, newest wins;
+  images are square-cropped to 192px JPEG (~5 KB) client-side, then shared as normal blobs. Own picture is also in
+  settings 'pfp' and re-published when joining a room that doesn't have it. Room pics are cached in the rooms list
+  (settings) for the rail. Click your name (sidebar top / "you" row) or the room tile for the menu.
 - Ideas next: unread badges for other ROOMS (needs multi-room core), more emojis, edit/delete messages,
   remember last channel per room.
 

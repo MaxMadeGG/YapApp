@@ -193,6 +193,38 @@
   #picker button { background: none; padding: 4px 6px; font-size: 20px; line-height: 1; border-radius: 6px; }
   #picker button:hover { background: var(--hover); filter: none; }
 
+  /* Pictures */
+  .avatar { overflow: hidden; }
+  .avatar.hasPic { background: none !important; }
+  .avatar img, .railRoom img { width: 100%; height: 100%; object-fit: cover; display: block; }
+  .railRoom { overflow: hidden; }
+  #roomPicBtn { background: none; padding: 0; border-radius: 9px; flex: none; }
+  #roomPicBtn:hover { filter: brightness(1.15); }
+  .avatar.room { width: 38px; height: 38px; border-radius: 9px; font-size: 17px; }
+  #meLabel { cursor: pointer; width: fit-content; border-radius: 4px; }
+  #meLabel:hover { color: var(--text); }
+  #popMenu { position: fixed; z-index: 40; background: var(--panel); border: 1px solid var(--line); border-radius: 8px;
+    padding: 4px; display: flex; flex-direction: column; box-shadow: 0 6px 24px rgba(0,0,0,.45); }
+  #popMenu.hidden { display: none; }
+  #popMenu button { background: none; color: var(--text); text-align: left; font-weight: 500; padding: 7px 12px; border-radius: 6px; }
+  #popMenu button:hover { background: var(--hover); filter: none; }
+
+  /* Emoji panel */
+  #emojiPanel { position: fixed; z-index: 35; width: 340px; max-width: calc(100vw - 16px); height: 330px;
+    background: var(--panel); border: 1px solid var(--line); border-radius: 10px; box-shadow: 0 6px 24px rgba(0,0,0,.45);
+    display: flex; flex-direction: column; }
+  #emojiPanel.hidden { display: none; }
+  #emojiPanel .tabs { display: flex; justify-content: space-between; border-bottom: 1px solid var(--line); padding: 4px;
+    overflow-x: auto; scrollbar-width: none; flex: none; }
+  #emojiPanel .tabs button { background: none; padding: 4px 3px; font-size: 17px; border-radius: 6px; opacity: .6; flex: none; }
+  #emojiPanel .tabs button.on { background: var(--hover); opacity: 1; }
+  #emojiPanel .grid { flex: 1; overflow-y: auto; padding: 6px; display: grid; grid-template-columns: repeat(8, 1fr); align-content: start; }
+  #emojiPanel .grid button { background: none; padding: 4px 0; font-size: 22px; line-height: 1.2; border-radius: 6px; }
+  #emojiPanel .grid button:hover { background: var(--hover); filter: none; }
+  #emojiPanel .none { grid-column: 1 / -1; color: var(--muted); font-size: 13px; padding: 20px; text-align: center; }
+  #picker .more { color: var(--muted); padding: 4px 6px; }
+  #picker .more svg.i { width: 18px; height: 18px; }
+
   /* Attachments */
   #attachTray { display: flex; flex-wrap: wrap; gap: 6px; padding: 8px 10px 0; }
   .attach { display: flex; align-items: center; gap: 6px; background: var(--panel); border: 1px solid var(--line);
@@ -331,10 +363,11 @@
     </nav>
     <div class="sidePanel">
       <div class="brand">
+        <button type="button" id="roomPicBtn" title="Room picture"></button>
         <div class="title">
           <b id="roomName" title="Click to rename the room"></b>
           <input id="roomRenameInput" class="hidden" maxlength="40" autocomplete="off">
-          <small id="meLabel"></small>
+          <small id="meLabel" title="Change your profile picture"></small>
         </div>
       </div>
       <div class="side">
@@ -388,6 +421,7 @@
       <div class="tools">
         <button type="button" class="iconBtn" id="attachBtn" title="Attach photos or files"><svg class="i"><use href="#i-clip"/></svg></button>
         <button type="button" class="iconBtn" id="folderBtn" title="Attach a folder"><svg class="i"><use href="#i-folder"/></svg></button>
+        <button type="button" class="iconBtn emojiBtn" id="emojiBtn" title="Emoji"><svg class="i"><use href="#i-smile"/></svg></button>
         <input type="file" id="fileInput" multiple hidden>
         <input type="file" id="folderInput" webkitdirectory hidden>
         <span class="hint">Enter to send · Shift+Enter for a new line · paste or drop files</span>
@@ -462,6 +496,14 @@
       div.style.background = colorFor(name)
       div.textContent = (name.trim()[0] || '#').toUpperCase()
       div.title = name
+      if (r.pic) {
+        loadFileUrl(r.pic).then(url => {
+          if (!url) return
+          const img = document.createElement('img'); img.src = url; img.alt = ''
+          div.textContent = ''
+          div.append(img)
+        })
+      }
       div.addEventListener('click', () => {
         closeDrawer()
         if (keyOf(r.invite) !== current) enterRoom(myName, r.invite, false)
@@ -476,11 +518,22 @@
     for (const c of name) { h ^= c.charCodeAt(0); h = Math.imul(h, 16777619) }
     return `hsl(${Math.round(((h >>> 0) * 0.618033988749895 % 1) * 360)}, 62%, 66%)`
   }
-  function avatar (name, cls) {
+  function avatar (name, cls) { return picAvatar(name, (profiles.get(name) || {}).pic, cls) }
+  // Letter tile, replaced by the picture once it has loaded.
+  function picAvatar (name, pic, cls) {
     const a = document.createElement('div')
     a.className = 'avatar' + (cls ? ' ' + cls : '')
     a.style.background = colorFor(name)
     a.textContent = (name.trim()[0] || '?').toUpperCase()
+    if (pic) {
+      loadFileUrl(pic).then(url => {
+        if (!url) return
+        const img = document.createElement('img'); img.src = url; img.alt = ''
+        a.textContent = ''
+        a.classList.add('hasPic')
+        a.append(img)
+      })
+    }
     return a
   }
   const timeOf = ts => new Date(ts).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })
@@ -521,6 +574,17 @@
   // Record a history entry in the maps. Returns false for duplicates / stale toggles.
   function ingest (m) {
     if (m.kind === 'key') { people.add(m.name); return true }
+    if (m.kind === 'profile') {
+      const prev = profiles.get(m.name)
+      if (prev && prev.ts >= m.ts) return false
+      profiles.set(m.name, { pic: m.pic, ts: m.ts })
+      return true
+    }
+    if (m.kind === 'roompic') {
+      if (roomPic.ts >= m.ts) return false
+      roomPic = { pic: m.pic, ts: m.ts }
+      return true
+    }
     if (m.kind === 'chan') {
       const prev = channels.get(m.target)
       if (prev && prev.ts >= m.ts) return false
@@ -711,6 +775,7 @@
     if (!ingest(m)) return
     entries.push(m)
     if (m.kind === 'key') { renderPeople(); return }
+    if (m.kind === 'profile' || m.kind === 'roompic') { rememberRoomPic(); refreshPictures(); return }
     if (m.kind === 'chan') {
       if (m.target === currentCh && channels.get(currentCh).deleted) switchChannel(GENERAL)
       else { renderChannels(); showChannelHeader() }
@@ -740,7 +805,8 @@
 
   function renderHistory (list) {
     entries = list.slice()
-    byId.clear(); reacts.clear(); replies.clear(); resetChannels(); people.clear()
+    byId.clear(); reacts.clear(); replies.clear(); resetChannels(); people.clear(); profiles.clear()
+    roomPic = { pic: null, ts: 0 }
     for (const m of list) ingest(m)
     if (!isDm(currentCh)) {
       const cur = channels.get(currentCh)
@@ -749,6 +815,18 @@
     renderChannels()
     renderPeople()
     renderMain()
+    rememberRoomPic()
+    renderRoomPic()
+    syncMyPicture()
+  }
+
+  // Keep the room's picture in the saved room list too, for the icon rail.
+  function rememberRoomPic () {
+    const r = rooms.find(r => keyOf(r.invite) === current)
+    if (!r || ((r.pic && r.pic.h) || null) === ((roomPic.pic && roomPic.pic.h) || null)) return
+    if (roomPic.pic) r.pic = roomPic.pic; else delete r.pic
+    saveRooms()
+    renderRooms()
   }
 
   function renderMain () {
@@ -945,6 +1023,7 @@
       if (you) { const y = document.createElement('span'); y.className = 'you'; y.textContent = 'you'; l.append(y) }
       div.append(p, l)
       if (!you) div.addEventListener('click', () => switchChannel(id))
+      else { div.style.cursor = 'pointer'; div.title = 'Change your profile picture'; div.addEventListener('click', e => { e.stopPropagation(); pictureMenu(div, 'profile') }) }
       box.append(div)
     }
     if (myName) row(myName, true)
@@ -962,6 +1041,7 @@
 
   function showRoom (info) {
     $('roomName').textContent = info.room
+    if (typeof renderRoomPic === 'function') renderRoomPic()
     $('inviteCode').textContent = info.invite
     store('invite', info.invite) // same secret, newest name
     rememberRoom(info.invite, info.room)
@@ -1359,6 +1439,231 @@
   $('viewerClose').addEventListener('click', closeViewer)
   $('viewerSave').addEventListener('click', () => saveRefs([viewerRef], null, $('viewerSave')))
   document.addEventListener('keydown', e => { if (e.key === 'Escape') closeViewer() })
+
+  // ---- Emoji panel (composer + "more reactions"). Plain lists, grouped like a phone keyboard.
+  const EMOJI_SETS = [
+    ['🕘', 'Recent', []],
+    ['😀', 'Smileys', '😀 😃 😄 😁 😆 😅 🤣 😂 🙂 🙃 🫠 😉 😊 😇 🥰 😍 🤩 😘 😗 ☺️ 😚 😙 🥲 😋 😛 😜 🤪 😝 🤑 🤗 🤭 🫢 🫣 🤫 🤔 🫡 🤐 🤨 😐 😑 😶 🫥 😏 😒 🙄 😬 🤥 😌 😔 😪 🤤 😴 😷 🤒 🤕 🤢 🤮 🤧 🥵 🥶 🥴 😵 🤯 🤠 🥳 🥸 😎 🤓 🧐 😕 🫤 😟 🙁 ☹️ 😮 😯 😲 😳 🥺 🥹 😦 😧 😨 😰 😥 😢 😭 😱 😖 😣 😞 😓 😩 😫 🥱 😤 😡 😠 🤬 😈 👿 💀 ☠️ 💩 🤡 👹 👺 👻 👽 👾 🤖 😺 😸 😹 😻 😼 😽 🙀 😿 😾 🙈 🙉 🙊'],
+    ['👋', 'People', '👋 🤚 🖐️ ✋ 🖖 👌 🤌 🤏 ✌️ 🤞 🫰 🤟 🤘 🤙 👈 👉 👆 🖕 👇 ☝️ 🫵 👍 👎 ✊ 👊 🤛 🤜 👏 🙌 🫶 👐 🤲 🤝 🙏 ✍️ 💅 🤳 💪 🦾 🦵 🦶 👂 👃 🧠 👀 👁️ 👅 👄 🫦 👶 🧒 👦 👧 🧑 👱 👨 🧔 👩 🧓 👴 👵 🙍 🙎 🙅 🙆 💁 🙋 🧏 🙇 🤦 🤷 👮 🕵️ 💂 🥷 👷 🤴 👸 👳 🧕 🤵 👰 🤰 🤱 👼 🎅 🤶 🦸 🦹 🧙 🧚 🧛 🧜 🧝 🧞 🧟 💆 💇 🚶 🧍 🧎 🏃 💃 🕺 👯 🧖 🧗 🤺 🏇 ⛷️ 🏂 🏌️ 🏄 🚣 🏊 ⛹️ 🏋️ 🚴 🚵 🤸 🤼 🤽 🤾 🤹 🧘 🛀 👫 👬 👭 💏 💑 👪'],
+    ['🐶', 'Animals & nature', '🐶 🐱 🐭 🐹 🐰 🦊 🐻 🐼 🐻‍❄️ 🐨 🐯 🦁 🐮 🐷 🐽 🐸 🐵 🐔 🐧 🐦 🐤 🐣 🐥 🦆 🦅 🦉 🦇 🐺 🐗 🐴 🦄 🐝 🪱 🐛 🦋 🐌 🐞 🐜 🪰 🪲 🦟 🦗 🕷️ 🦂 🐢 🐍 🦎 🦖 🦕 🐙 🦑 🦐 🦞 🦀 🐡 🐠 🐟 🐬 🐳 🐋 🦈 🐊 🐅 🐆 🦓 🦍 🦧 🐘 🦛 🦏 🐪 🐫 🦒 🦘 🦬 🐃 🐂 🐄 🐎 🐖 🐏 🐑 🦙 🐐 🦌 🐕 🐩 🦮 🐈 🐈‍⬛ 🪶 🐓 🦃 🦤 🦚 🦜 🦢 🦩 🕊️ 🐇 🦝 🦨 🦡 🦫 🦦 🦥 🐁 🐀 🐿️ 🦔 🐾 🐉 🐲 🌵 🎄 🌲 🌳 🌴 🪵 🌱 🌿 ☘️ 🍀 🎍 🪴 🎋 🍃 🍂 🍁 🍄 🐚 🪨 🌾 💐 🌷 🌹 🥀 🌺 🌸 🌼 🌻 🌞 🌝 🌛 🌜 🌚 🌕 🌙 🌎 🪐 💫 ⭐ 🌟 ✨ ⚡ ☄️ 💥 🔥 🌪️ 🌈 ☀️ ⛅ ☁️ 🌧️ ⛈️ 🌩️ ❄️ ☃️ ⛄ 🌬️ 💨 💧 💦 🌊'],
+    ['🍔', 'Food & drink', '🍏 🍎 🍐 🍊 🍋 🍌 🍉 🍇 🍓 🫐 🍈 🍒 🍑 🥭 🍍 🥥 🥝 🍅 🍆 🥑 🥦 🥬 🥒 🌶️ 🫑 🌽 🥕 🧄 🧅 🥔 🍠 🥐 🥯 🍞 🥖 🥨 🧀 🥚 🍳 🧈 🥞 🧇 🥓 🥩 🍗 🍖 🌭 🍔 🍟 🍕 🫓 🥪 🥙 🧆 🌮 🌯 🫔 🥗 🥘 🫕 🥫 🍝 🍜 🍲 🍛 🍣 🍱 🥟 🦪 🍤 🍙 🍚 🍘 🍥 🥠 🥮 🍢 🍡 🍧 🍨 🍦 🥧 🧁 🍰 🎂 🍮 🍭 🍬 🍫 🍿 🍩 🍪 🌰 🥜 🍯 🥛 🍼 🫖 ☕ 🍵 🧃 🥤 🧋 🍶 🍺 🍻 🥂 🍷 🥃 🍸 🍹 🧉 🍾 🧊 🥄 🍴 🍽️'],
+    ['⚽', 'Activities', '⚽ 🏀 🏈 ⚾ 🥎 🎾 🏐 🏉 🥏 🎱 🪀 🏓 🏸 🏒 🏑 🥍 🏏 🪃 🥅 ⛳ 🪁 🏹 🎣 🤿 🥊 🥋 🎽 🛹 🛼 🛷 ⛸️ 🥌 🎿 🏆 🥇 🥈 🥉 🏅 🎖️ 🏵️ 🎗️ 🎫 🎟️ 🎪 🎭 🩰 🎨 🎬 🎤 🎧 🎼 🎹 🥁 🪘 🎷 🎺 🪗 🎸 🪕 🎻 🎲 ♟️ 🎯 🎳 🎮 🕹️ 🎰 🧩 🎉 🎊 🎈 🎁 🎀 🪅 🪩'],
+    ['🚗', 'Travel & places', '🚗 🚕 🚙 🚌 🚎 🏎️ 🚓 🚑 🚒 🚐 🛻 🚚 🚛 🚜 🛵 🏍️ 🛺 🚲 🛴 🚨 🚔 🚍 🚘 🚖 🚡 🚠 🚟 🚃 🚋 🚞 🚝 🚄 🚅 🚈 🚂 🚆 🚇 🚊 🚉 ✈️ 🛫 🛬 🛩️ 💺 🛰️ 🚀 🛸 🚁 🛶 ⛵ 🚤 🛥️ 🛳️ ⛴️ 🚢 ⚓ 🪝 ⛽ 🚧 🚦 🚥 🗺️ 🗿 🗽 🗼 🏰 🏯 🏟️ 🎡 🎢 🎠 ⛲ ⛱️ 🏖️ 🏝️ 🏜️ 🌋 ⛰️ 🏔️ 🗻 🏕️ ⛺ 🏠 🏡 🏘️ 🏚️ 🏗️ 🏭 🏢 🏬 🏣 🏤 🏥 🏦 🏨 🏪 🏫 🏩 💒 🏛️ ⛪ 🕌 🕍 🛕 🕋 ⛩️ 🌅 🌄 🌠 🎇 🎆 🌇 🌆 🏙️ 🌃 🌌 🌉 🌁'],
+    ['💡', 'Objects', '⌚ 📱 📲 💻 ⌨️ 🖥️ 🖨️ 🖱️ 🕹️ 💽 💾 💿 📀 📼 📷 📸 📹 🎥 📽️ 🎞️ 📞 ☎️ 📟 📠 📺 📻 🎙️ ⏱️ ⏲️ ⏰ 🕰️ ⌛ ⏳ 📡 🔋 🔌 💡 🔦 🕯️ 🧯 🛢️ 💸 💵 💴 💶 💷 🪙 💰 💳 💎 ⚖️ 🪜 🧰 🪛 🔧 🔨 ⚒️ 🛠️ ⛏️ 🪚 🔩 ⚙️ 🧱 ⛓️ 🧲 🔫 💣 🧨 🪓 🔪 🗡️ ⚔️ 🛡️ 🚬 ⚰️ 🔮 📿 🧿 💈 ⚗️ 🔭 🔬 🕳️ 🩹 🩺 💊 💉 🩸 🧬 🦠 🧫 🧪 🌡️ 🧹 🧺 🧻 🚽 🚿 🛁 🧼 🪥 🪒 🧽 🧴 🛎️ 🔑 🗝️ 🚪 🪑 🛋️ 🛏️ 🧸 🪆 🖼️ 🪞 🛍️ 🛒 🎁 🎈 🎏 🎀 🪄 🪅 🎊 🎉 🎎 🏮 🎐 🧧 ✉️ 📩 📨 📧 💌 📥 📤 📦 🏷️ 📪 📫 📬 📭 📮 📯 📜 📃 📄 📑 🧾 📊 📈 📉 🗒️ 🗓️ 📆 📅 🗑️ 📇 🗃️ 🗳️ 🗄️ 📋 📁 📂 🗂️ 🗞️ 📰 📓 📔 📒 📕 📗 📘 📙 📚 📖 🔖 🧷 🔗 📎 🖇️ 📐 📏 🧮 📌 📍 ✂️ 🖊️ 🖋️ ✒️ 🖌️ 🖍️ 📝 ✏️ 🔍 🔎 🔏 🔐 🔒 🔓'],
+    ['❤️', 'Symbols', '❤️ 🧡 💛 💚 💙 💜 🖤 🤍 🤎 💔 ❤️‍🔥 ❤️‍🩹 ❣️ 💕 💞 💓 💗 💖 💘 💝 💟 ☮️ ✝️ ☪️ 🕉️ ☸️ ✡️ 🔯 🕎 ☯️ ☦️ 🛐 ⛎ ♈ ♉ ♊ ♋ ♌ ♍ ♎ ♏ ♐ ♑ ♒ ♓ 🆔 ⚛️ ☢️ ☣️ 📴 📳 🈶 🆚 💮 🉐 ㊙️ ㊗️ 🆎 🆑 🅾️ 🆘 ❌ ⭕ 🛑 ⛔ 📛 🚫 💯 💢 ♨️ 🚷 🚯 🚳 🚱 🔞 📵 🚭 ❗ ❕ ❓ ❔ ‼️ ⁉️ 🔅 🔆 〽️ ⚠️ 🚸 🔱 ⚜️ 🔰 ♻️ ✅ 🈯 💹 ❇️ ✳️ ❎ 🌐 💠 Ⓜ️ 🌀 💤 🏧 🚾 ♿ 🅿️ 🚹 🚺 🚼 🚻 🚮 🎦 📶 🈁 🔣 ℹ️ 🔤 🔡 🔠 🆖 🆗 🆙 🆒 🆕 🆓 0️⃣ 1️⃣ 2️⃣ 3️⃣ 4️⃣ 5️⃣ 6️⃣ 7️⃣ 8️⃣ 9️⃣ 🔟 🔢 #️⃣ *️⃣ ▶️ ⏸️ ⏯️ ⏹️ ⏺️ ⏭️ ⏮️ ⏩ ⏪ ⏫ ⏬ ◀️ 🔼 🔽 ➡️ ⬅️ ⬆️ ⬇️ ↗️ ↘️ ↙️ ↖️ ↕️ ↔️ ↪️ ↩️ ⤴️ ⤵️ 🔀 🔁 🔂 🔄 🔃 🎵 🎶 ➕ ➖ ➗ ✖️ ♾️ 💲 💱 ™️ ©️ ®️ 〰️ ➰ ➿ 🔚 🔙 🔛 🔝 🔜 ✔️ ☑️ 🔘 🔴 🟠 🟡 🟢 🔵 🟣 ⚫ ⚪ 🟤 🔺 🔻 🔸 🔹 🔶 🔷 🔳 🔲 ▪️ ▫️ ◾ ◽ ◼️ ◻️ 🟥 🟧 🟨 🟩 🟦 🟪 ⬛ ⬜ 🟫 🔈 🔇 🔉 🔊 🔔 🔕 📣 📢 💬 💭 🗯️ ♠️ ♣️ ♥️ ♦️ 🃏 🎴 🀄'],
+    ['🏳️', 'Flags', '🏁 🚩 🎌 🏴 🏳️ 🏳️‍🌈 🏳️‍⚧️ 🏴‍☠️ 🇨🇿 🇸🇰 🇫🇷 🇩🇪 🇬🇧 🇺🇸 🇪🇺 🇺🇦 🇵🇱 🇦🇹 🇮🇹 🇪🇸 🇵🇹 🇳🇱 🇧🇪 🇨🇭 🇸🇪 🇳🇴 🇩🇰 🇫🇮 🇮🇪 🇬🇷 🇭🇺 🇷🇴 🇭🇷 🇨🇦 🇲🇽 🇧🇷 🇦🇷 🇯🇵 🇰🇷 🇨🇳 🇮🇳 🇦🇺 🇳🇿 🇿🇦 🇹🇷 🇮🇱 🇪🇬']
+  ].map(([icon, title, list]) => ({ icon, title, list: Array.isArray(list) ? list : list.split(' ') }))
+
+  // Hide emojis this device's font can't draw (Windows 10 lacks everything newer than ~2019):
+  // a missing emoji renders as the same box as a code point nobody has, or as several glyphs.
+  const emojiCheck = (() => {
+    const cv = document.createElement('canvas'); cv.width = cv.height = 24
+    const g = cv.getContext('2d', { willReadFrequently: true })
+    g.font = '20px "Segoe UI Emoji", "Apple Color Emoji", "Noto Color Emoji", sans-serif'
+    g.textBaseline = 'top'
+    const draw = t => { g.clearRect(0, 0, 24, 24); g.fillText(t, 0, 0); return g.getImageData(0, 0, 24, 24).data.join() }
+    const tofu = draw('\u{1FAFF}')
+    const width = g.measureText('😀').width
+    const cache = new Map()
+    return e => {
+      if (!cache.has(e)) cache.set(e, g.measureText(e).width <= width * 1.4 && draw(e) !== tofu)
+      return cache.get(e)
+    }
+  })()
+
+  function recentEmojis () {
+    try { return JSON.parse(localStorage.getItem('yapRecentEmoji') || '[]') } catch { return [] }
+  }
+  function useEmoji (e) {
+    try { localStorage.setItem('yapRecentEmoji', JSON.stringify([e, ...recentEmojis().filter(x => x !== e)].slice(0, 32))) } catch {}
+  }
+
+  const emojiPanel = document.createElement('div')
+  emojiPanel.id = 'emojiPanel'
+  emojiPanel.className = 'hidden'
+  emojiPanel.innerHTML = '<div class="tabs"></div><div class="grid"></div>'
+  document.body.append(emojiPanel)
+  let emojiPick = null
+  let emojiTab = 1
+  function renderEmojiPanel () {
+    const tabs = emojiPanel.querySelector('.tabs')
+    const grid = emojiPanel.querySelector('.grid')
+    tabs.innerHTML = ''
+    EMOJI_SETS.forEach((set, i) => {
+      const t = document.createElement('button')
+      t.type = 'button'; t.textContent = set.icon; t.title = set.title
+      t.className = i === emojiTab ? 'on' : ''
+      t.addEventListener('click', e => { e.stopPropagation(); emojiTab = i; renderEmojiPanel() })
+      tabs.append(t)
+    })
+    grid.innerHTML = ''
+    const list = (emojiTab === 0 ? recentEmojis() : EMOJI_SETS[emojiTab].list).filter(emojiCheck)
+    if (!list.length) grid.innerHTML = '<div class="none">Emojis you use show up here.</div>'
+    for (const em of list) {
+      const b = document.createElement('button')
+      b.type = 'button'; b.textContent = em
+      b.addEventListener('click', e => {
+        e.stopPropagation()
+        useEmoji(em)
+        const fn = emojiPick
+        closeEmojiPanel()
+        fn && fn(em)
+      })
+      grid.append(b)
+    }
+    grid.scrollTop = 0
+  }
+  function openEmojiPanel (anchor, onPick) {
+    closePicker()
+    emojiPick = onPick
+    if (emojiTab === 0 && !recentEmojis().length) emojiTab = 1
+    renderEmojiPanel()
+    emojiPanel.classList.remove('hidden')
+    const r = anchor.getBoundingClientRect()
+    const w = emojiPanel.offsetWidth, h = emojiPanel.offsetHeight
+    emojiPanel.style.left = Math.max(8, Math.min(r.left, innerWidth - w - 8)) + 'px'
+    emojiPanel.style.top = Math.max(8, r.top - h - 6 > 8 ? r.top - h - 6 : Math.min(r.bottom + 6, innerHeight - h - 8)) + 'px'
+  }
+  function closeEmojiPanel () { emojiPanel.classList.add('hidden'); emojiPick = null }
+  document.addEventListener('pointerdown', e => {
+    if (!emojiPanel.contains(e.target) && !e.target.closest('.emojiBtn')) closeEmojiPanel()
+  })
+
+  // "+" at the end of the quick reaction bar opens the full panel.
+  const moreBtn = document.createElement('button')
+  moreBtn.type = 'button'
+  moreBtn.className = 'more emojiBtn'
+  moreBtn.title = 'More emojis'
+  moreBtn.innerHTML = '<svg class="i"><use href="#i-plus"/></svg>'
+  moreBtn.addEventListener('click', e => {
+    e.stopPropagation()
+    const id = pickerFor
+    openEmojiPanel(picker, em => {
+      const mine = reactionList(id).find(r => r.emoji === em)?.mine
+      if (!mine) toggleReaction(id, em, true)
+    })
+  })
+  picker.append(moreBtn)
+
+  // Emoji button in the message box: insert at the cursor.
+  $('emojiBtn').addEventListener('click', () => {
+    if (!emojiPanel.classList.contains('hidden')) { closeEmojiPanel(); return }
+    const box = $('input')
+    const start = box.selectionStart ?? box.value.length, end = box.selectionEnd ?? start
+    openEmojiPanel($('emojiBtn'), em => {
+      box.value = box.value.slice(0, start) + em + box.value.slice(end)
+      box.dispatchEvent(new Event('input'))
+      if (!IS_PHONE) { box.focus(); box.selectionStart = box.selectionEnd = start + em.length }
+    })
+  })
+
+  // ---- Pictures: your profile picture and the room's picture.
+  const profiles = new Map() // name -> { pic, ts }
+  let roomPic = { pic: null, ts: 0 }
+
+  // Square-crop and shrink a picture so it's tiny to share.
+  async function shrinkImage (blob, size = 192) {
+    const bmp = await createImageBitmap(blob)
+    const side = Math.min(bmp.width, bmp.height)
+    const cv = document.createElement('canvas')
+    cv.width = cv.height = size
+    cv.getContext('2d').drawImage(bmp, (bmp.width - side) / 2, (bmp.height - side) / 2, side, side, 0, 0, size, size)
+    const out = await new Promise(resolve => cv.toBlob(resolve, 'image/jpeg', 0.88))
+    return new Uint8Array(await out.arrayBuffer())
+  }
+
+  // Ask for one image (file input on desktop, native picker on phones) -> shrunk bytes.
+  function pickImage () {
+    return new Promise(resolve => {
+      if (chat.pickFiles) {
+        chat.pickFiles().then(async list => {
+          const f = list.find(x => x.path && (x.mime || '').startsWith('image/'))
+          if (!f) return resolve(null)
+          const tmp = await chat.addFile({ path: f.path }, f.name, f.mime)
+          const bytes = tmp && !tmp.error ? await chat.getFile(tmp) : null
+          resolve(bytes ? shrinkImage(new Blob([bytes], { type: f.mime })).catch(() => null) : null)
+        })
+        return
+      }
+      const input = document.createElement('input')
+      input.type = 'file'
+      input.accept = 'image/*'
+      input.onchange = () => {
+        const f = input.files[0]
+        resolve(f ? shrinkImage(f).catch(() => null) : null)
+      }
+      input.click()
+    })
+  }
+
+  async function changePicture (kind) {
+    const bytes = await pickImage()
+    if (!bytes) return
+    const ref = await chat.addFile(bytes, kind === 'profile' ? 'profile.jpg' : 'room.jpg', 'image/jpeg')
+    if (!ref || ref.error) { addSys('Could not use that picture.'); return }
+    const m = await chat.setPicture(kind, ref)
+    if (kind === 'profile') store('pfp', JSON.stringify(ref)) // follows you into every room
+    if (m) addMsg(m)
+  }
+  async function removePicture (kind) {
+    const m = await chat.setPicture(kind, null)
+    if (kind === 'profile') forget('pfp')
+    if (m) addMsg(m)
+  }
+
+  // After joining: make sure this room shows the picture you chose (maybe in another room).
+  async function syncMyPicture () {
+    let mine = null
+    try { mine = JSON.parse(load('pfp') || 'null') } catch {}
+    const cur = profiles.get(myName)
+    if (mine && (!cur || !cur.pic || cur.pic.h !== mine.h)) {
+      const m = await chat.setPicture('profile', mine)
+      if (m) addMsg(m)
+    }
+  }
+
+  // Small popup menu (change / remove picture).
+  const menu = document.createElement('div')
+  menu.id = 'popMenu'
+  menu.className = 'hidden'
+  document.body.append(menu)
+  function openMenu (anchor, items) {
+    menu.innerHTML = ''
+    for (const [label, fn] of items) {
+      const b = document.createElement('button')
+      b.type = 'button'; b.textContent = label
+      b.addEventListener('click', e => { e.stopPropagation(); menu.classList.add('hidden'); fn() })
+      menu.append(b)
+    }
+    menu.classList.remove('hidden')
+    const r = anchor.getBoundingClientRect()
+    menu.style.left = Math.max(8, Math.min(r.left, innerWidth - menu.offsetWidth - 8)) + 'px'
+    menu.style.top = Math.min(r.bottom + 6, innerHeight - menu.offsetHeight - 8) + 'px'
+  }
+  document.addEventListener('pointerdown', e => { if (!menu.contains(e.target)) menu.classList.add('hidden') })
+
+  function pictureMenu (anchor, kind) {
+    const has = kind === 'profile' ? !!(profiles.get(myName) || {}).pic : !!roomPic.pic
+    const items = [[kind === 'profile' ? 'Change your profile picture' : 'Change room picture', () => changePicture(kind)]]
+    if (has) items.push([kind === 'profile' ? 'Remove your picture' : 'Remove room picture', () => removePicture(kind)])
+    openMenu(anchor, items)
+  }
+  $('roomPicBtn').addEventListener('click', e => { e.stopPropagation(); pictureMenu($('roomPicBtn'), 'roompic') })
+  $('meLabel').addEventListener('click', e => { e.stopPropagation(); pictureMenu($('meLabel'), 'profile') })
+
+  // Re-draw everything that shows pictures.
+  function refreshPictures () {
+    renderRoomPic()
+    renderRooms()
+    renderPeers(online) // sidebar people + header faces
+    renderMain()
+    if (openThread) renderThread(false)
+  }
+  function renderRoomPic () {
+    const b = $('roomPicBtn')
+    b.innerHTML = ''
+    b.append(picAvatar($('roomName').textContent || '#', roomPic.pic, 'room'))
+  }
 
   // ---- Composers (main + thread). Phones: Enter is a new line, the Send button sends.
   function setupComposer (form, box, btn, parentId, withFiles) {
