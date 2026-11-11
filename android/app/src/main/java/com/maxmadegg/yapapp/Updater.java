@@ -31,7 +31,7 @@ import java.net.URL;
 class Updater {
   private static final String TAG = "YapApp";
   static final String FEED = "https://github.com/MaxMadeGG/YapApp/releases/download/latest/android-latest.json";
-  private static final long CHECK_EVERY_MS = 2 * 60 * 1000L; // the feed is a tiny JSON file; check on (almost) every open
+  private static final long CHECK_EVERY_MS = 30 * 1000L; // the feed is a tiny JSON file; check on (almost) every open
 
   interface Ready { void onReady(String versionName); }
 

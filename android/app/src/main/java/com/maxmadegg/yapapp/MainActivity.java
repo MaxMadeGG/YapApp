@@ -286,6 +286,16 @@ public class MainActivity extends Activity {
     }
   }
 
+  // Check when the app comes to the front, and every few minutes while it stays open
+  // (so a version published right after you opened the app still shows up).
+  private final Runnable checkForUpdate = new Runnable() {
+    @Override public void run() {
+      updater.checkAsync(false, v -> mainHandler.post(() -> { updateVersion = v; showUpdate(); }));
+      mainHandler.removeCallbacks(this);
+      mainHandler.postDelayed(this, 5 * 60 * 1000L);
+    }
+  };
+
   static final int REQ_PICK = 4242;
   static final long MAX_PICK = 50L * 1024 * 1024;
 
@@ -357,13 +367,14 @@ public class MainActivity extends Activity {
       // Background-start restriction; binding still works, retried on next resume.
     }
     if (service != null) service.setUiVisible(true);
-    updater.checkAsync(false, v -> mainHandler.post(() -> { updateVersion = v; showUpdate(); }));
+    checkForUpdate.run();
   }
 
   @Override
   protected void onPause() {
     super.onPause();
     isResumedNow = false;
+    mainHandler.removeCallbacks(checkForUpdate);
     if (service != null) service.setUiVisible(false);
   }
 

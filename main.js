@@ -92,7 +92,7 @@ function setupAutoUpdate () {
   updater.on('error', err => console.log('update check failed:', err && err.message))
   const check = () => updater.checkForUpdates().catch(() => {})
   check()
-  setInterval(check, 4 * 3600 * 1000)
+  setInterval(check, 10 * 60 * 1000) // new builds show up within minutes, not hours
 }
 ipcMain.handle('update:install', () => { if (updater) updater.quitAndInstall() })
 
