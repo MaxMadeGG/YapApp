@@ -209,6 +209,13 @@
   #popMenu button { background: none; color: var(--text); text-align: left; font-weight: 500; padding: 7px 12px; border-radius: 6px; }
   #popMenu button:hover { background: var(--hover); filter: none; }
 
+  /* Custom emojis */
+  img.cemoji { width: 1.35em; height: 1.35em; vertical-align: -0.3em; object-fit: contain; }
+  .text.jumbo img.cemoji { width: 2.8em; height: 2.8em; vertical-align: middle; }
+  #picker img.cemoji { width: 22px; height: 22px; vertical-align: middle; }
+  #emojiPanel .tabs img.cemoji { width: 19px; height: 19px; vertical-align: middle; }
+  #emojiPanel .grid img.cemoji { width: 28px; height: 28px; vertical-align: middle; }
+
   /* Emoji panel */
   #emojiPanel { position: fixed; z-index: 35; width: 340px; max-width: calc(100vw - 16px); height: 330px;
     background: var(--panel); border: 1px solid var(--line); border-radius: 10px; box-shadow: 0 6px 24px rgba(0,0,0,.45);
@@ -553,7 +560,30 @@
   // History holds three kinds of entries (see core.js): normal messages, thread
   // replies (parent = id) and reaction toggles (kind 'react'). Only normal
   // messages go in the main list; the others decorate them.
-  const EMOJIS = ['👍', '❤️', '😂', '🎉', '😮', '😢', '🔥', '👀', '✅', '🙏']
+  // Custom emojis (Slack style :name:), drawn for YapApp. Typed as text, shown as pictures.
+  const CUSTOM_EMOJI = {
+    sadshit: 'data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2064%2064%22%3E%20%3Cpath%20fill%3D%22%236b3f1d%22%20d%3D%22M33%203c2%204%201%207-2%209%206%200%2010%203%2010%207%200%201%200%202-1%203%205%200%209%203%209%208%200%201%200%202-1%203%206%201%2011%205%2011%2011%200%207-6%2012-13%2012H18C11%2056%205%2051%205%2044c0-6%205-10%2011-11-1-1-1-2-1-3%200-5%204-8%209-8-1-1-1-2-1-3%200-4%204-7%209-7-2-3-1-7%202-9z%22%2F%3E%20%3Cpath%20fill%3D%22%238b5529%22%20d%3D%22M31%2014c4%200%207%202%207%205H26c0-3%202-5%205-5zm-6%2011h17c3%200%205%201%205%203H20c0-2%202-3%205-3zm-7%2011h29c5%200%208%202%209%205H9c1-3%204-5%209-5z%22%2F%3E%20%3Cpath%20fill%3D%22none%22%20stroke%3D%22%233e220c%22%20stroke-width%3D%222%22%20stroke-linecap%3D%22round%22%20d%3D%22M18%2032l7-3M46%2032l-7-3%22%2F%3E%20%3Cellipse%20cx%3D%2224%22%20cy%3D%2238%22%20rx%3D%224.5%22%20ry%3D%225%22%20fill%3D%22%23fff%22%2F%3E%20%3Cellipse%20cx%3D%2240%22%20cy%3D%2238%22%20rx%3D%224.5%22%20ry%3D%225%22%20fill%3D%22%23fff%22%2F%3E%20%3Ccircle%20cx%3D%2224%22%20cy%3D%2240%22%20r%3D%222.6%22%20fill%3D%22%232b1608%22%2F%3E%20%3Ccircle%20cx%3D%2240%22%20cy%3D%2240%22%20r%3D%222.6%22%20fill%3D%22%232b1608%22%2F%3E%20%3Cpath%20fill%3D%22none%22%20stroke%3D%22%232b1608%22%20stroke-width%3D%222.6%22%20stroke-linecap%3D%22round%22%20d%3D%22M24%2052c4-5%2012-5%2016%200%22%2F%3E%20%3Cpath%20fill%3D%22%235ec8ff%22%20stroke%3D%22%232f8fd6%22%20stroke-width%3D%221%22%20d%3D%22M18%2043c2%203%204%206%204%208a4%204%200%200%201-8%200c0-2%202-5%204-8z%22%2F%3E%20%3C%2Fsvg%3E'
+  }
+  const CUSTOM_RE = /:([a-z0-9_+-]{1,32}):/g
+  const isCustom = e => /^:[a-z0-9_+-]{1,32}:$/.test(e) && Object.hasOwn(CUSTOM_EMOJI, e.slice(1, -1))
+  function emojiNode (e) {
+    if (!isCustom(e)) return document.createTextNode(e)
+    const img = document.createElement('img')
+    img.className = 'cemoji'; img.src = CUSTOM_EMOJI[e.slice(1, -1)]; img.alt = e; img.title = e
+    return img
+  }
+  // Message text with :custom: emojis turned into pictures (big when that's all there is).
+  function richText (el, text) {
+    let last = 0
+    for (const m of text.matchAll(CUSTOM_RE)) {
+      if (!isCustom(m[0])) continue
+      el.append(text.slice(last, m.index), emojiNode(m[0]))
+      last = m.index + m[0].length
+    }
+    el.append(text.slice(last))
+    if (last && !text.replace(CUSTOM_RE, '').trim()) el.classList.add('jumbo')
+  }
+  const EMOJIS = ['👍', '❤️', '😂', '🎉', '😮', '😢', '🔥', '👀', '✅', '🙏', ':sadshit:']
   const byId = new Map()     // id -> message (normal + replies)
   const reacts = new Map()   // target id -> Map(emoji -> Map(name -> { on, ts }))
   const replies = new Map()  // parent id -> [reply]
@@ -633,7 +663,7 @@
   let pickerFor = null
   for (const e of EMOJIS) {
     const b = document.createElement('button')
-    b.type = 'button'; b.textContent = e
+    b.type = 'button'; b.append(emojiNode(e))
     b.addEventListener('click', () => {
       const id = pickerFor; closePicker()
       const mine = reactionList(id).find(r => r.emoji === e)?.mine
@@ -676,7 +706,7 @@
       c.type = 'button'
       c.className = 'chip' + (r.mine ? ' mine' : '')
       c.title = r.names.join(', ') + ' reacted with ' + r.emoji
-      c.textContent = r.emoji + ' ' + r.names.length
+      c.append(emojiNode(r.emoji), ' ' + r.names.length)
       c.addEventListener('click', () => toggleReaction(id, r.emoji, !r.mine))
       box.append(c)
     }
@@ -722,7 +752,7 @@
       head.append(n, t)
       body.append(head)
     }
-    const text = document.createElement('div'); text.className = 'text'; text.textContent = m.text
+    const text = document.createElement('div'); text.className = 'text'; richText(text, m.text)
     const rx = document.createElement('div'); rx.className = 'reactions'
     body.append(text)
     if (m.files) body.append(filesEl(m.files))
@@ -1443,6 +1473,7 @@
   // ---- Emoji panel (composer + "more reactions"). Plain lists, grouped like a phone keyboard.
   const EMOJI_SETS = [
     ['🕘', 'Recent', []],
+    [':sadshit:', 'Custom', Object.keys(CUSTOM_EMOJI).map(n => ':' + n + ':')],
     ['😀', 'Smileys', '😀 😃 😄 😁 😆 😅 🤣 😂 🙂 🙃 🫠 😉 😊 😇 🥰 😍 🤩 😘 😗 ☺️ 😚 😙 🥲 😋 😛 😜 🤪 😝 🤑 🤗 🤭 🫢 🫣 🤫 🤔 🫡 🤐 🤨 😐 😑 😶 🫥 😏 😒 🙄 😬 🤥 😌 😔 😪 🤤 😴 😷 🤒 🤕 🤢 🤮 🤧 🥵 🥶 🥴 😵 🤯 🤠 🥳 🥸 😎 🤓 🧐 😕 🫤 😟 🙁 ☹️ 😮 😯 😲 😳 🥺 🥹 😦 😧 😨 😰 😥 😢 😭 😱 😖 😣 😞 😓 😩 😫 🥱 😤 😡 😠 🤬 😈 👿 💀 ☠️ 💩 🤡 👹 👺 👻 👽 👾 🤖 😺 😸 😹 😻 😼 😽 🙀 😿 😾 🙈 🙉 🙊'],
     ['👋', 'People', '👋 🤚 🖐️ ✋ 🖖 👌 🤌 🤏 ✌️ 🤞 🫰 🤟 🤘 🤙 👈 👉 👆 🖕 👇 ☝️ 🫵 👍 👎 ✊ 👊 🤛 🤜 👏 🙌 🫶 👐 🤲 🤝 🙏 ✍️ 💅 🤳 💪 🦾 🦵 🦶 👂 👃 🧠 👀 👁️ 👅 👄 🫦 👶 🧒 👦 👧 🧑 👱 👨 🧔 👩 🧓 👴 👵 🙍 🙎 🙅 🙆 💁 🙋 🧏 🙇 🤦 🤷 👮 🕵️ 💂 🥷 👷 🤴 👸 👳 🧕 🤵 👰 🤰 🤱 👼 🎅 🤶 🦸 🦹 🧙 🧚 🧛 🧜 🧝 🧞 🧟 💆 💇 🚶 🧍 🧎 🏃 💃 🕺 👯 🧖 🧗 🤺 🏇 ⛷️ 🏂 🏌️ 🏄 🚣 🏊 ⛹️ 🏋️ 🚴 🚵 🤸 🤼 🤽 🤾 🤹 🧘 🛀 👫 👬 👭 💏 💑 👪'],
     ['🐶', 'Animals & nature', '🐶 🐱 🐭 🐹 🐰 🦊 🐻 🐼 🐻‍❄️ 🐨 🐯 🦁 🐮 🐷 🐽 🐸 🐵 🐔 🐧 🐦 🐤 🐣 🐥 🦆 🦅 🦉 🦇 🐺 🐗 🐴 🦄 🐝 🪱 🐛 🦋 🐌 🐞 🐜 🪰 🪲 🦟 🦗 🕷️ 🦂 🐢 🐍 🦎 🦖 🦕 🐙 🦑 🦐 🦞 🦀 🐡 🐠 🐟 🐬 🐳 🐋 🦈 🐊 🐅 🐆 🦓 🦍 🦧 🐘 🦛 🦏 🐪 🐫 🦒 🦘 🦬 🐃 🐂 🐄 🐎 🐖 🐏 🐑 🦙 🐐 🦌 🐕 🐩 🦮 🐈 🐈‍⬛ 🪶 🐓 🦃 🦤 🦚 🦜 🦢 🦩 🕊️ 🐇 🦝 🦨 🦡 🦫 🦦 🦥 🐁 🐀 🐿️ 🦔 🐾 🐉 🐲 🌵 🎄 🌲 🌳 🌴 🪵 🌱 🌿 ☘️ 🍀 🎍 🪴 🎋 🍃 🍂 🍁 🍄 🐚 🪨 🌾 💐 🌷 🌹 🥀 🌺 🌸 🌼 🌻 🌞 🌝 🌛 🌜 🌚 🌕 🌙 🌎 🪐 💫 ⭐ 🌟 ✨ ⚡ ☄️ 💥 🔥 🌪️ 🌈 ☀️ ⛅ ☁️ 🌧️ ⛈️ 🌩️ ❄️ ☃️ ⛄ 🌬️ 💨 💧 💦 🌊'],
@@ -1466,6 +1497,7 @@
     const width = g.measureText('😀').width
     const cache = new Map()
     return e => {
+      if (isCustom(e)) return true
       if (!cache.has(e)) cache.set(e, g.measureText(e).width <= width * 1.4 && draw(e) !== tofu)
       return cache.get(e)
     }
@@ -1484,14 +1516,14 @@
   emojiPanel.innerHTML = '<div class="tabs"></div><div class="grid"></div>'
   document.body.append(emojiPanel)
   let emojiPick = null
-  let emojiTab = 1
+  let emojiTab = 2 // Smileys
   function renderEmojiPanel () {
     const tabs = emojiPanel.querySelector('.tabs')
     const grid = emojiPanel.querySelector('.grid')
     tabs.innerHTML = ''
     EMOJI_SETS.forEach((set, i) => {
       const t = document.createElement('button')
-      t.type = 'button'; t.textContent = set.icon; t.title = set.title
+      t.type = 'button'; t.append(emojiNode(set.icon)); t.title = set.title
       t.className = i === emojiTab ? 'on' : ''
       t.addEventListener('click', e => { e.stopPropagation(); emojiTab = i; renderEmojiPanel() })
       tabs.append(t)
@@ -1501,7 +1533,7 @@
     if (!list.length) grid.innerHTML = '<div class="none">Emojis you use show up here.</div>'
     for (const em of list) {
       const b = document.createElement('button')
-      b.type = 'button'; b.textContent = em
+      b.type = 'button'; b.append(emojiNode(em)); b.title = isCustom(em) ? em : ''
       b.addEventListener('click', e => {
         e.stopPropagation()
         useEmoji(em)
@@ -1516,7 +1548,7 @@
   function openEmojiPanel (anchor, onPick) {
     closePicker()
     emojiPick = onPick
-    if (emojiTab === 0 && !recentEmojis().length) emojiTab = 1
+    if (emojiTab === 0 && !recentEmojis().length) emojiTab = 2
     renderEmojiPanel()
     emojiPanel.classList.remove('hidden')
     const r = anchor.getBoundingClientRect()

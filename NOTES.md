@@ -73,6 +73,9 @@ README.md has install/build details; this file is "where things stand".
   images are square-cropped to 192px JPEG (~5 KB) client-side, then shared as normal blobs. Own picture is also in
   settings 'pfp' and re-published when joining a room that doesn't have it. Room pics are cached in the rooms list
   (settings) for the rail. Click your name (sidebar top / "you" row) or the room tile for the menu.
+- Custom emojis: CUSTOM_EMOJI in index.html (name -> inline SVG data URL; :sadshit: drawn by hand 2026-11-11).
+  Messages keep the :name: text; richText() swaps known names for <img class=cemoji>; works in reactions, quick
+  bar, and the panel's "Custom" tab. Add more by adding entries (no protocol change).
 - Ideas next: unread badges for other ROOMS (needs multi-room core), more emojis, edit/delete messages,
   remember last channel per room.
 
