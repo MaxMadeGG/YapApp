@@ -4,6 +4,15 @@ Serverless P2P group chat, Slack-like. Desktop (Electron, Windows/Linux) + Andro
 README.md has install/build details; this file is "where things stand".
 
 ## Where things stand (read this first)
+- TODO NEXT SESSION (user, 2026-11-11 evening): "the APK didn't update" to the latest (0.3.31 = device linking).
+  Phone last seen on 0.3.29 (links were blue) - maybe 0.3.30. Check with adb: `dumpsys package
+  com.maxmadegg.yapapp | grep versionName`, logcat -s YapApp (Updater logs failures only), and whether the
+  update bar appears. Suspects: (1) Updater only re-checks on resume / every 5 min from 0.3.30 on - older builds
+  only on open with a throttle; (2) right after CI replaces release assets, downloads 404/truncate for 1-2 min
+  (seen on the .exe) - Updater may cache a bad/partial download or fail silently; (3) PackageInstaller /
+  MIUI install prompt. Consider: log every check result, verify download size vs content-length, retry later.
+- Laptop: YapApp 0.3.30 INSTALLED (desktop shortcut exists), should self-update to 0.3.31. User then links it
+  to the phone with "Link another device".
 - Live rolling build 0.3.25 (win/linux/apk at releases/tag/latest); all features below pushed and CI green.
 - Features: rooms (= workspaces, invite-only) with channels, threads, reactions, encrypted DMs, files/photos/
   folders, emoji panel (+ Favorites tab from the user's Slack, custom :sadshit:), profile + room pictures,
