@@ -234,6 +234,7 @@
   .field > div { flex: 1; min-width: 0; }
   .field button { padding: 3px 10px; font-size: 12px; }
   .cardBtns { display: flex; gap: 8px; justify-content: flex-end; margin-top: 6px; }
+  .cardBtns.wide { flex-direction: column-reverse; }
   .cardBtns.wide button { flex: 1; }
   .empty-profile { color: var(--muted); font-size: 13px; text-align: center; }
   .picRow { display: flex; align-items: center; gap: 14px; margin-bottom: 4px; }
@@ -244,6 +245,13 @@
   #editProfileForm .note { color: var(--muted); font-size: 12px; margin: 2px 0 0; }
   .clickable { cursor: pointer; }
   .msg .name.clickable:hover { text-decoration: underline; }
+
+  /* Device linking */
+  .hintInline { color: var(--muted); font-weight: 400; }
+  .linkText { margin: 0; font-size: 14px; color: var(--text); }
+  #linkCode { display: block; padding: 8px 10px; background: var(--input); border-radius: 8px; font: 12px Consolas, monospace;
+    word-break: break-all; user-select: all; max-height: 140px; overflow-y: auto; }
+  .linkWarn { margin: 0; font-size: 12px; color: #ffb36b; }
 
   /* Unread */
   .item.unread { color: #fff; font-weight: 800; }
@@ -431,9 +439,9 @@
     <label for="name" id="nameLabel">Your name</label>
     <input id="name" maxlength="40" autocomplete="off">
 
-    <label for="invite">Join a room</label>
+    <label for="invite">Join a room <span class="hintInline">· or paste a device link code from your other device</span></label>
     <div class="row">
-      <input id="invite" autocomplete="off" placeholder="paste invite code (yap1-...)">
+      <input id="invite" autocomplete="off" placeholder="invite code (yap1-…) or device code (yapdev1-…)">
       <button type="button" id="joinBtn">Join</button>
     </div>
     <div id="invitePreview"></div>
@@ -453,6 +461,18 @@
   <div class="bar"><span id="viewerName"></span><button id="viewerSave">Save</button>
     <button class="iconBtn" id="viewerClose" title="Close"><svg class="i"><use href="#i-x"/></svg></button></div>
   <img id="viewerImg" alt="">
+</div>
+
+<div id="linkModal" class="modal hidden">
+  <div class="card">
+    <div class="cardHead"><h2>Link another device</h2>
+      <button type="button" class="iconBtn" id="linkClose" title="Close"><svg class="i"><use href="#i-x"/></svg></button></div>
+    <p class="linkText">On your other phone or computer, open YapApp and paste this code where it says
+      <b>Join a room</b>. It signs in as you with all your rooms.</p>
+    <code id="linkCode"></code>
+    <p class="linkWarn">Anyone with this code can read all your rooms, so only send it to yourself.</p>
+    <div class="cardBtns wide"><button type="button" id="linkCopy">Copy code</button></div>
+  </div>
 </div>
 
 <div id="profileModal" class="modal hidden"><div class="card" id="profileCard"></div></div>
@@ -1545,6 +1565,58 @@
     $('join').classList.remove('hidden')
   }
 
+  // ---- Device link codes: your name + all your rooms + your profile, to sign in on another device.
+  const b64u = str => btoa(unescape(encodeURIComponent(str))).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '')
+  const unb64u = s => decodeURIComponent(escape(atob(s.replace(/-/g, '+').replace(/_/g, '/'))))
+  function makeDeviceCode () {
+    const prof = profiles.get(myName) || myProfile()
+    const data = { v: 1, n: myName, r: rooms.map(r => ({ i: r.invite, n: r.name || '' })) }
+    if (prof && (prof.pic || Object.keys(prof.info || {}).length)) data.p = { pic: prof.pic || null, info: prof.info || {} }
+    return 'yapdev1-' + b64u(JSON.stringify(data))
+  }
+  function readDeviceCode (code) {
+    const m = /^yapdev1-([A-Za-z0-9_-]+)$/.exec(String(code).trim())
+    if (!m) return null
+    try {
+      const d = JSON.parse(unb64u(m[1]))
+      if (!d || typeof d.n !== 'string' || !Array.isArray(d.r)) return null
+      d.r = d.r.filter(r => r && typeof r.i === 'string' && keyOf(r.i) !== r.i)
+      return d.r.length ? d : null
+    } catch { return null }
+  }
+  async function useDeviceCode (d) {
+    for (const r of d.r) {
+      if (!rooms.some(x => keyOf(x.invite) === keyOf(r.i))) rooms.push({ invite: r.i, name: r.n || '' })
+    }
+    saveRooms()
+    renderRooms()
+    // Signing in fresh: become the same person. Already signed in: just add the rooms.
+    if (!current) {
+      const name = String(d.n).slice(0, 40)
+      if (d.p) store('profile', JSON.stringify({ pic: d.p.pic || null, info: d.p.info || {}, ts: 0 }))
+      store('name', name)
+      $('name').value = name
+      return enterRoom(name, d.r[0].i, false)
+    }
+    $('join').classList.add('hidden')
+    $('chat').classList.remove('hidden')
+    addSys(d.r.length === 1 ? 'Added 1 room from your other device.' : `Added ${d.r.length} rooms from your other device.`)
+    return true
+  }
+
+  $('linkClose').addEventListener('click', () => $('linkModal').classList.add('hidden'))
+  $('linkModal').addEventListener('click', e => { if (e.target.id === 'linkModal') $('linkModal').classList.add('hidden') })
+  $('linkCopy').addEventListener('click', async () => {
+    await chat.copy($('linkCode').textContent)
+    $('linkCopy').textContent = 'Copied!'
+    setTimeout(() => { $('linkCopy').textContent = 'Copy code' }, 1500)
+  })
+  function openLinkDevice () {
+    $('linkCode').textContent = makeDeviceCode()
+    $('linkCopy').textContent = 'Copy code'
+    $('linkModal').classList.remove('hidden')
+  }
+
   function needName () {
     const name = $('name').value.trim()
     if (!name) { showError('Type your name first.'); $('name').focus() }
@@ -1552,6 +1624,8 @@
   }
 
   $('joinBtn').addEventListener('click', () => {
+    const dev = readDeviceCode($('invite').value)
+    if (dev) { showError(''); useDeviceCode(dev); return } // the name comes with the code
     const name = needName(); if (!name) return
     const invite = $('invite').value.trim()
     if (!invite) { showError('Paste an invite code, or create a room.'); return }
@@ -1567,6 +1641,13 @@
   })
   $('invite').addEventListener('input', async () => {
     const code = $('invite').value.trim()
+    const dev = readDeviceCode(code)
+    if (dev) {
+      $('invitePreview').textContent = current
+        ? `Device code: adds ${dev.r.length} room${dev.r.length === 1 ? '' : 's'}`
+        : `Device code: sign in as ${dev.n} with ${dev.r.length} room${dev.r.length === 1 ? '' : 's'}`
+      return
+    }
     const room = code ? await chat.checkInvite(code) : null
     $('invitePreview').textContent = room ? 'Room: ' + room : (code ? 'Not a valid invite code' : '')
   })
@@ -2135,6 +2216,9 @@
     if (you) {
       b.textContent = 'Edit profile'
       b.addEventListener('click', () => { closeProfile(); openEditProfile() })
+      const lk = document.createElement('button'); lk.type = 'button'; lk.className = 'ghost'; lk.textContent = 'Link another device'
+      lk.addEventListener('click', () => { closeProfile(); openLinkDevice() })
+      btns.append(lk)
     } else {
       b.textContent = 'Message'
       b.disabled = !people.has(name)
@@ -2181,7 +2265,7 @@
     await publishProfile({ pic: cur.pic || null, info })
     openProfile(myName)
   })
-  document.addEventListener('keydown', e => { if (e.key === 'Escape') { closeProfile(); closeEditProfile() } })
+  document.addEventListener('keydown', e => { if (e.key === 'Escape') { closeProfile(); closeEditProfile(); $('linkModal').classList.add('hidden') } })
 
   // Small popup menu (change / remove picture).
   const menu = document.createElement('div')

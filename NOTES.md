@@ -118,6 +118,13 @@ README.md has install/build details; this file is "where things stand".
   link); trailing punctuation trimmed. Clicks go to chat.openUrl -> Electron shell.openExternal / Android
   ACTION_VIEW intent (http/https/mailto only). Electron also blocks in-window navigation (will-navigate +
   setWindowOpenHandler); Android WebViewClient.shouldOverrideUrlLoading does the same.
+- Multi-device (2026-11-11): own profile card -> "Link another device" shows yapdev1-<b64url JSON {v,n:name,
+  r:[{i:invite,n:name}], p:{pic,info}}>. Pasting it in the Join field on a fresh device signs in as that name with
+  all rooms (+ profile settings, ts 0 so a newer room copy wins); when already signed in it just adds the rooms.
+  Same name on all devices = DMs reach every device (each device has its own DM key). New rooms joined later are
+  NOT synced between devices automatically - link again. User's laptop now has the INSTALLED app (per-user,
+  %LOCALAPPDATA%/Programs/YapApp, installed silently 2026-11-11 with /S). Rolling-release gotcha: right after CI
+  replaces assets, downloads can 404/truncate for a minute or two.
 - Ideas next: unread badges for other ROOMS (needs multi-room core), more emojis, edit/delete messages,
   remember last channel per room.
 
