@@ -104,6 +104,16 @@ README.md has install/build details; this file is "where things stand".
   of you = yellow tag + highlighted row + red "@" badge on the channel; @-popup autocomplete in both composers
   (capture-phase keydown beats Enter-to-send). Desktop: HTML5 Notification for mentions/DMs when not focused
   (app.setAppUserModelId for Windows toasts; 'win:focus' IPC on click). Android: "(mentioned you) " prefix.
+- Unread (2026-11-11): read positions per room in settings 'lastRead' {roomKey: {ch:{id:ts}, th:{id:ts}, since}}
+  (first visit = everything read). Unread = top-level msgs in a channel/DM newer than its read mark, not yours;
+  shown bright white + DM counts + "@n" mention badge; "New" line when opening a channel. Marked read when you
+  look (focus/visibility). "Threads" view (currentCh = '@threads') lists threads you started/replied to/were
+  mentioned in, unread first; seeing the list marks them read.
+- Names (2026-11-11): change in Edit profile. kind:'rename' {from,to} authored as the new name; UI keeps raw
+  history (rawEntries) and maps every entry's name through the alias chain before ingesting (mapNames), incl.
+  DM peers (core view now passes `to`). core.applyDeletes() follows renames too. Old names kept in settings
+  'renames' and re-announced in every room you join that knew you by them. Taken / reserved names refused.
+  Other devices keep their own settings name (they show up under the new name via the alias).
 - Ideas next: unread badges for other ROOMS (needs multi-room core), more emojis, edit/delete messages,
   remember last channel per room.
 

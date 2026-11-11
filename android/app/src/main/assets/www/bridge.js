@@ -34,6 +34,7 @@
     send: (text, extra) => call('send', text, extra),
     sendDm: (toName, text, files, extra) => call('sendDm', toName, text, files, extra),
     editMessage: (target, text) => call('editMessage', target, text),
+    renameMe: (from, to) => call('renameMe', from, to),
     deleteMessage: target => call('deleteMessage', target),
     // src = { path } from pickFiles() (bytes never go through the WebView).
     addFile: (src, name, mime, relPath) => {

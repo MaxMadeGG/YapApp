@@ -245,6 +245,31 @@
   .clickable { cursor: pointer; }
   .msg .name.clickable:hover { text-decoration: underline; }
 
+  /* Unread */
+  .item.unread { color: #fff; font-weight: 800; }
+  .item.unread .hash { opacity: 1; }
+  .item .count { background: #e6e6ea; color: #15161a; font-size: 11px; font-weight: 800; border-radius: 999px;
+    min-width: 18px; height: 18px; display: inline-flex; align-items: center; justify-content: center; padding: 0 6px; }
+  .item.active .count { background: #fff; }
+  #threadsItem { margin-bottom: 2px; }
+  #threadsItem .hash svg.i { width: 15px; height: 15px; vertical-align: -2px; }
+  .newLine { display: flex; align-items: center; gap: 8px; color: #ff6b6b; font-size: 12px; font-weight: 700; margin: 8px 20px 0; }
+  .newLine::before { content: ""; flex: 1; border-top: 1px solid #ff6b6b; }
+  #pfNameError { color: #ff7b7b; min-height: 0; margin: -4px 0 0; }
+  #pfNameError:empty { display: none; }
+  /* Threads view */
+  .threadCard { margin: 12px 20px; border: 1px solid var(--line); border-radius: 10px; background: var(--panel); cursor: pointer; overflow: hidden; }
+  .threadCard:hover { border-color: #3b3e47; }
+  .threadCard.unread { border-color: var(--accent); }
+  .threadCard .tcHead { display: flex; align-items: center; gap: 8px; padding: 8px 14px; font-size: 13px; color: var(--muted); border-bottom: 1px solid var(--line); }
+  .threadCard .tcHead b { color: var(--text); }
+  .threadCard .tcHead .newCount { margin-left: auto; background: var(--accent); color: #fff; border-radius: 999px; padding: 1px 8px; font-weight: 700; font-size: 12px; }
+  .threadCard .msg { padding-left: 14px; padding-right: 14px; }
+  .threadCard .msg.isNew { background: rgba(91, 140, 255, .08); }
+  .threadCard .more { color: var(--muted); font-size: 12px; padding: 2px 14px 0 60px; }
+  .threadCard .tcFoot { padding: 6px 14px 10px 60px; }
+  .threadCard .tcFoot button { padding: 4px 12px; font-size: 13px; }
+
   /* Mentions */
   .mention { background: #243a6b; color: #b9cdff; border-radius: 4px; padding: 0 3px; font-weight: 600; }
   .mention.me { background: #5a4712; color: #ffd56a; }
@@ -435,6 +460,8 @@
     <div class="picRow"><div id="editPic"></div>
       <div class="picBtns"><button type="button" class="ghost" id="editPicChange">Change picture</button>
         <button type="button" class="ghost" id="editPicRemove">Remove</button></div></div>
+    <label for="pfName">Name</label><input id="pfName" maxlength="40">
+    <p class="note" id="pfNameError"></p>
     <label for="pfTitle">What I do</label><input id="pfTitle" maxlength="80" placeholder="e.g. Game artist, student…">
     <label for="pfPronouns">Pronouns</label><input id="pfPronouns" maxlength="30" placeholder="optional">
     <label for="pfEmail">Email</label><input id="pfEmail" type="email" maxlength="120" placeholder="optional">
@@ -464,6 +491,7 @@
         </div>
       </div>
       <div class="side">
+        <div class="item" id="threadsItem"><span class="hash"><svg class="i"><use href="#i-thread"/></svg></span><span class="label">Threads</span></div>
         <div class="sectionHead">Channels
           <button class="iconBtn" id="addChannelBtn" title="Add a channel"><svg class="i"><use href="#i-plus"/></svg></button>
         </div>
@@ -676,6 +704,51 @@
   const unread = new Set()   // channel ids with new messages from others
   let entries = []           // every history entry of this room (all channels)
   const chOf = m => m.kind === 'dm' ? 'dm:' + m.peer : (m.ch || GENERAL)
+  const THREADS = '@threads' // the "Threads" view instead of a channel
+
+  // ---- Read positions (remembered per room in settings, so unread survives restarts)
+  let readKey = null
+  let readState = { ch: {}, th: {}, since: Date.now() }
+  let readTimer = null
+  function loadRead (key) {
+    readKey = key
+    let all = {}
+    try { all = JSON.parse(load('lastRead') || '{}') } catch {}
+    // First time in this room (or first time with this feature): everything already there counts as read.
+    readState = all[key] || { ch: {}, th: {}, since: Date.now() }
+    if (!all[key]) saveRead()
+  }
+  function saveRead () {
+    clearTimeout(readTimer)
+    readTimer = setTimeout(() => {
+      let all = {}
+      try { all = JSON.parse(load('lastRead') || '{}') } catch {}
+      if (readKey) all[readKey] = readState
+      store('lastRead', JSON.stringify(all))
+    }, 1500)
+  }
+  const readOf = ch => readState.ch[ch] ?? readState.since
+  const threadReadOf = id => readState.th[id] ?? readState.since
+  function markRead (ch) { if (!ch || ch === THREADS) return; readState.ch[ch] = Date.now(); saveRead() }
+  function markThreadRead (id) { readState.th[id] = Date.now(); saveRead() }
+  const isTop = m => (!m.kind || (m.kind === 'dm' && !isChange(m))) && !m.parent
+  const unreadIn = ch => { const since = readOf(ch); return entries.filter(m => isTop(m) && chOf(m) === ch && m.ts > since && m.name !== myName && !isDeleted(m)) }
+  const looking = () => document.hasFocus() && !document.hidden
+
+  // ---- Display names: "rename" entries map old names to new ones
+  const aliases = new Map() // old name -> { to, ts }
+  let rawEntries = []
+  function display (n) { let x = n; for (let i = 0; i < 10 && aliases.has(x); i++) x = aliases.get(x).to; return x }
+  function mapNames (m) {
+    if (!m || !m.name) return m
+    const c = { ...m, name: display(m.name) }
+    if (m.kind === 'dm') {
+      // Before we know our own name (app start) trust the core's peer; after a rename, work it out from names.
+      if (!myName) c.peer = display(m.peer)
+      else c.peer = c.name === myName ? display(m.to || m.peer) : c.name
+    }
+    return c
+  }
   const isDm = id => id.startsWith('dm:')
   const people = new Set()   // names that can receive direct messages (published a key)
   const authors = new Set()  // everyone who has written here (for @mentions)
@@ -961,7 +1034,7 @@
   }
 
   // Append a normal message to the main list.
-  function appendMain (m, stick) {
+  function appendMain (m, stick, markNew) {
     messagesEl.querySelector('.empty')?.remove()
     const newDay = !last || new Date(last.ts).toDateString() !== new Date(m.ts).toDateString()
     if (newDay) {
@@ -970,7 +1043,8 @@
       d.append(s)
       messagesEl.append(d)
     }
-    const grouped = !newDay && last && last.name === m.name && m.ts - last.ts < GROUP_MS
+    if (markNew) { const n = document.createElement('div'); n.className = 'newLine'; n.textContent = 'New'; messagesEl.append(n) }
+    const grouped = !markNew && !newDay && last && last.name === m.name && m.ts - last.ts < GROUP_MS
     messagesEl.append(msgEl(m, { grouped }))
     last = { name: m.name, ts: m.ts }
     if (stick) messagesEl.scrollTop = messagesEl.scrollHeight
@@ -978,6 +1052,9 @@
 
   // A new entry from us or a peer.
   function addMsg (m, forceScroll) {
+    if (m.kind === 'rename') { if (!rawEntries.some(x => x.id === m.id)) { rawEntries.push(m); renderHistory(rawEntries) } return }
+    rawEntries.push(m)
+    m = mapNames(m)
     if (!ingest(m)) return
     entries.push(m)
     if (isChange(m)) { refreshMsg(m.kind === 'dm' ? (m.edit || m.del) : m.target); return }
@@ -992,15 +1069,18 @@
     notifyIfNeeded(m)
     if (m.parent) {
       refresh(m.parent)
-      if (openThread === m.parent) renderThread(forceScroll)
+      if (openThread === m.parent) { renderThread(forceScroll); if (looking() || m.name === myName) markThreadRead(m.parent) }
+      renderThreadsItem()
+      if (currentCh === THREADS) renderMain()
       return
     }
-    if (chOf(m) !== currentCh && mentionsMe(m)) mentionUnread.add(chOf(m))
     if (chOf(m) !== currentCh) {
-      if (m.name !== myName) { unread.add(chOf(m)); renderChannels(); renderPeople() }
+      if (m.name !== myName) { renderChannels(); renderPeople() }
       return
     }
     appendMain(m, forceScroll || nearBottom())
+    if (looking() || m.name === myName) markRead(currentCh)
+    else { renderChannels(); renderPeople() }
   }
 
   function addSys (text) {
@@ -1013,17 +1093,27 @@
   }
 
   function renderHistory (list) {
+    rawEntries = list.slice()
+    aliases.clear()
+    for (const m of list) {
+      if (m.kind !== 'rename' || m.name !== m.to) continue
+      const prev = aliases.get(m.from)
+      if (!prev || prev.ts < m.ts) aliases.set(m.from, { to: m.to, ts: m.ts })
+    }
+    for (const [from] of aliases) if (display(from) === from) aliases.delete(from) // renamed back in a loop
+    list = list.filter(m => m.kind !== 'rename').map(mapNames)
     entries = list.slice()
     byId.clear(); reacts.clear(); replies.clear(); resetChannels(); people.clear(); profiles.clear()
     edits.clear(); dels.clear(); authors.clear()
     roomPic = { pic: null, ts: 0 }
     for (const m of list) ingest(m)
-    if (!isDm(currentCh)) {
+    if (!isDm(currentCh) && currentCh !== THREADS) {
       const cur = channels.get(currentCh)
       if (!cur || cur.deleted) currentCh = GENERAL
     }
     renderChannels()
     renderPeople()
+    renderThreadsItem()
     renderMain()
     rememberRoomPic()
     renderRoomPic()
@@ -1038,10 +1128,11 @@
     renderRooms()
   }
 
-  function renderMain () {
+  function renderMain (newSince) {
     showChannelHeader()
     messagesEl.innerHTML = ''
     last = null
+    if (currentCh === THREADS) { renderThreadsView(); return }
     const top = entries.filter(m => (!m.kind || (m.kind === 'dm' && !isChange(m))) && !m.parent &&
       chOf(m) === currentCh && (!isDeleted(m) || liveReplies(m.id).length))
     if (!top.length) {
@@ -1062,14 +1153,27 @@
       lock.textContent = '🔒 Encrypted: only you and ' + currentCh.slice(3) + ' can read these messages'
       messagesEl.prepend(lock)
     }
-    for (const m of top) appendMain(m, false)
+    let newEl = null
+    for (const m of top) {
+      const first = newSince && !newEl && m.ts > newSince && m.name !== myName
+      appendMain(m, false, first)
+      if (first) newEl = messagesEl.querySelector('.newLine')
+    }
     messagesEl.scrollTop = messagesEl.scrollHeight
+    if (newEl && newEl.offsetTop < messagesEl.scrollTop) messagesEl.scrollTop = Math.max(0, newEl.offsetTop - 60)
     if (openThread && byId.has(openThread) && chOf(byId.get(openThread)) === currentCh) renderThread(false)
     else closeThread()
   }
 
   // ---- Channels (sidebar list, header, add / rename / delete)
   function showChannelHeader () {
+    $('composer').classList.toggle('hidden', currentCh === THREADS)
+    $('threadsItem').classList.toggle('active', currentCh === THREADS)
+    if (currentCh === THREADS) {
+      $('roomLabel').textContent = 'Threads'
+      $('roomLabel').title = 'Threads you started, replied to or were mentioned in'
+      return
+    }
     if (isDm(currentCh)) {
       const who = currentCh.slice(3)
       $('roomLabel').textContent = who
@@ -1086,13 +1190,13 @@
 
   function switchChannel (id) {
     currentCh = id
-    unread.delete(id)
-    mentionUnread.delete(id)
+    const since = readOf(id)
+    markRead(id)
     closeThread()
     closeDrawer()
     renderChannels()
     renderPeople()
-    renderMain()
+    renderMain(since)
     if (!IS_PHONE) $('input').focus()
   }
 
@@ -1103,11 +1207,13 @@
       .sort(([a, x], [b, y]) => (a === GENERAL ? -1 : b === GENERAL ? 1 : x.name.localeCompare(y.name)))
     for (const [id, c] of list) {
       const div = document.createElement('div')
-      div.className = 'item' + (id === currentCh ? ' active' : '') + (unread.has(id) ? ' unread' : '')
+      const fresh = id === currentCh && looking() ? [] : unreadIn(id)
+      div.className = 'item' + (id === currentCh ? ' active' : '') + (fresh.length ? ' unread' : '')
       const h = document.createElement('span'); h.className = 'hash'; h.textContent = '#'
       const l = document.createElement('span'); l.className = 'label'; l.textContent = c.name
       const tools = document.createElement('span'); tools.className = 'tools'
-      if (mentionUnread.has(id)) div.dataset.mention = '1'
+      const mentions = fresh.filter(mentionsMe).length
+      if (mentions) div.dataset.mention = String(mentions)
       const ren = iconBtn('iconBtn', 'Rename channel', '#i-edit')
       ren.addEventListener('click', e => { e.stopPropagation(); if (id !== currentCh) switchChannel(id); startRename() })
       tools.append(ren)
@@ -1117,7 +1223,7 @@
         tools.append(del)
       }
       div.append(h, l)
-      if (div.dataset.mention) { const b = document.createElement('span'); b.className = 'badge'; b.textContent = '@'; div.append(b) }
+      if (div.dataset.mention) { const b = document.createElement('span'); b.className = 'badge'; b.textContent = '@' + (mentions > 1 ? mentions : ''); div.append(b) }
       div.append(tools)
       div.addEventListener('click', () => { if (!div.classList.contains('confirm')) switchChannel(id) })
       box.append(div)
@@ -1165,9 +1271,81 @@
   })
   $('newChannelInput').addEventListener('blur', () => finishNewChannel(true))
 
+  // ---- "Threads" view: threads you're in (started, replied, mentioned), unread first
+  function myThreads () {
+    const out = []
+    for (const [pid] of replies) {
+      const p = byId.get(pid)
+      const reps = liveReplies(pid)
+      if (!p || !reps.length) continue
+      const involved = p.name === myName || reps.some(r => r.name === myName) || mentionsMe(p) || reps.some(mentionsMe)
+      if (!involved) continue
+      const since = threadReadOf(pid)
+      const fresh = reps.filter(r => r.ts > since && r.name !== myName)
+      out.push({ p, reps, fresh, lastTs: reps[reps.length - 1].ts, since })
+    }
+    return out.sort((a, b) => (!!b.fresh.length - !!a.fresh.length) || b.lastTs - a.lastTs)
+  }
+  function renderThreadsItem () {
+    const el = $('threadsItem')
+    const n = myThreads().reduce((a, t) => a + t.fresh.length, 0)
+    el.classList.toggle('unread', n > 0)
+    el.querySelector('.count')?.remove()
+    if (n) { const c = document.createElement('span'); c.className = 'count'; c.textContent = n; el.append(c) }
+  }
+  function renderThreadsView () {
+    const list = myThreads()
+    if (!list.length) {
+      const e = document.createElement('div'); e.className = 'empty'
+      const b = document.createElement('b'); b.textContent = 'No threads yet'
+      e.append(b, 'Threads you start, reply to or get mentioned in show up here.')
+      messagesEl.append(e)
+      return
+    }
+    for (const t of list) {
+      const card = document.createElement('div')
+      card.className = 'threadCard' + (t.fresh.length ? ' unread' : '')
+      const head = document.createElement('div'); head.className = 'tcHead'
+      const where = document.createElement('b')
+      where.textContent = '#' + ((channels.get(chOf(t.p)) || {}).name || 'general')
+      head.append(where, ' · ' + t.reps.length + (t.reps.length === 1 ? ' reply' : ' replies'))
+      if (t.fresh.length) { const n = document.createElement('span'); n.className = 'newCount'; n.textContent = t.fresh.length + ' new'; head.append(n) }
+      card.append(head, msgEl(t.p, { thread: true }))
+      const shown = t.reps.slice(-3)
+      if (t.reps.length > shown.length) {
+        const more = document.createElement('div'); more.className = 'more'
+        more.textContent = (t.reps.length - shown.length) + ' earlier ' + (t.reps.length - shown.length === 1 ? 'reply' : 'replies')
+        card.append(more)
+      }
+      let prev = null
+      for (const r of shown) {
+        const el = msgEl(r, { thread: true, grouped: prev && prev.name === r.name && r.ts - prev.ts < GROUP_MS })
+        if (r.ts > t.since && r.name !== myName) el.classList.add('isNew')
+        card.append(el)
+        prev = r
+      }
+      const foot = document.createElement('div'); foot.className = 'tcFoot'
+      const btn = document.createElement('button'); btn.type = 'button'; btn.className = 'ghost'; btn.textContent = 'Reply'
+      foot.append(btn)
+      card.append(foot)
+      card.addEventListener('click', e => {
+        if (e.target.closest('.actions, .reactions, .mention, .chanLink, .name, .avatar')) return
+        switchChannel(chOf(t.p))
+        showThread(t.p.id)
+      })
+      messagesEl.append(card)
+    }
+    messagesEl.scrollTop = 0
+    // Seen in the list = read (the "new" marks stay until you leave the view).
+    if (looking() && list.some(t => t.fresh.length)) { for (const t of list) if (t.fresh.length) markThreadRead(t.p.id); renderThreadsItem() }
+  }
+  $('threadsItem').addEventListener('click', () => switchChannel(THREADS))
+
   // ---- Thread panel
   function showThread (id) {
     openThread = id
+    markThreadRead(id)
+    renderThreadsItem()
     closePicker()
     $('chat').classList.add('threadOpen')
     renderThread(true)
@@ -1202,6 +1380,14 @@
   $('closeThread').addEventListener('click', closeThread)
 
   chat.on('history', renderHistory)
+  function caughtUp () {
+    if (!looking() || !readKey) return
+    if (currentCh !== THREADS) markRead(currentCh)
+    if (openThread) markThreadRead(openThread)
+    renderChannels(); renderPeople(); renderThreadsItem()
+  }
+  window.addEventListener('focus', caughtUp)
+  document.addEventListener('visibilitychange', caughtUp)
   // Keep the newest message in view when the list resizes (phone keyboard, composer growing).
   let wasAtBottom = true
   messagesEl.addEventListener('scroll', () => { wasAtBottom = nearBottom() })
@@ -1229,13 +1415,15 @@
       const id = 'dm:' + name
       const on = you || online.includes(name)
       const div = document.createElement('div')
+      const fresh = you || (id === currentCh && looking()) ? [] : unreadIn(id)
       div.className = 'item' + (you ? ' static' : '') + (on ? '' : ' offline') +
-        (id === currentCh ? ' active' : '') + (unread.has(id) ? ' unread' : '')
+        (id === currentCh ? ' active' : '') + (fresh.length ? ' unread' : '')
       const p = document.createElement('span'); p.className = on ? 'presence' : 'avatarWrap'
       p.append(avatar(name, 'sm'))
       const l = document.createElement('span'); l.className = 'label'; l.textContent = name + ' '
       if (you) { const y = document.createElement('span'); y.className = 'you'; y.textContent = 'you'; l.append(y) }
       div.append(p, l)
+      if (fresh.length) { const c = document.createElement('span'); c.className = 'count'; c.textContent = fresh.length; div.append(c) }
       if (!you) div.addEventListener('click', () => switchChannel(id))
       else { div.style.cursor = 'pointer'; div.title = 'Your profile'; div.addEventListener('click', e => { e.stopPropagation(); openProfile(myName) }) }
       p.classList.add('clickable')
@@ -1295,7 +1483,7 @@
   const startRename = inlineEdit($('roomLabel'), $('renameInput'), () => channels.get(currentCh).name, async v => {
     const m = await chat.setChannel(currentCh, v, false)
     if (m) addMsg(m)
-  }, () => !isDm(currentCh))
+  }, () => !isDm(currentCh) && currentCh !== THREADS)
   $('roomLabel').addEventListener('click', () => { if (isDm(currentCh)) openProfile(currentCh.slice(3)) })
   inlineEdit($('roomName'), $('roomRenameInput'), () => $('roomName').textContent, async v => {
     const info = await chat.renameRoom(v)
@@ -1312,7 +1500,8 @@
 
   // ---- Entering rooms / join screen
   async function enterRoom (name, invite, showInvite) {
-    if (keyOf(invite) !== current) { currentCh = GENERAL; unread.clear(); closeThread() }
+    if (keyOf(invite) !== current) { currentCh = GENERAL; closeThread() }
+    loadRead(keyOf(invite))
     const res = await chat.join(name, invite)
     if (!res.ok) { showError(res.error); return false }
     showError('')
@@ -1327,6 +1516,7 @@
     $('chat').classList.remove('hidden')
     renderPeers([])
     syncMyProfile()
+    syncMyNames()
     messagesEl.scrollTop = messagesEl.scrollHeight // history arrived while the chat was still hidden
     if (!IS_PHONE) $('input').focus()
     return true
@@ -1862,6 +2052,34 @@
     if (m) addMsg(m)
   }
 
+  // ---- Changing your name. Each room gets a "rename" entry so your old messages, DMs and profile follow you.
+  const oldNames = () => { try { return JSON.parse(load('renames') || '[]') } catch { return [] } }
+  async function syncMyNames () {
+    for (const old of oldNames()) {
+      if (old === myName || display(old) === myName) continue
+      if (!rawEntries.some(x => x.name === old)) continue // this room never knew you by that name
+      const m = await chat.renameMe(old, myName)
+      if (m) addMsg(m)
+    }
+  }
+  async function changeMyName (newName) {
+    newName = newName.replace(/\s+/g, ' ').trim().slice(0, 40)
+    if (!newName || newName === myName) return null
+    const lower = newName.toLowerCase()
+    if (BROADCASTS.some(b => b[0] === lower)) return 'That name is reserved.'
+    if (knownNames().some(n => n !== myName && n.toLowerCase() === lower)) return 'Someone in this room already uses that name.'
+    const old = myName
+    store('renames', JSON.stringify([...new Set([...oldNames(), old])].filter(n => n !== newName)))
+    store('name', newName)
+    const res = await chat.join(newName, load('invite')) // reconnect under the new name
+    if (!res || !res.ok) return 'Could not change the name right now.'
+    myName = newName
+    $('meLabel').textContent = newName
+    const m = await chat.renameMe(old, newName)
+    if (m) addMsg(m)
+    return null
+  }
+
   // ---- Profile card (click someone's picture or name) and the edit dialog
   const FIELD_LABELS = [['email', 'Email', true], ['phone', 'Phone', true], ['location', 'Location'], ['about', 'About']]
   let profileFor = null
@@ -1935,6 +2153,8 @@
   }
   function openEditProfile () {
     const p = profiles.get(myName) || myProfile()
+    $('pfName').value = myName
+    $('pfNameError').textContent = ''
     for (const [k, id] of Object.entries(PF)) $(id).value = (p.info || {})[k] || ''
     renderEditPic()
     $('editProfileModal').classList.remove('hidden')
@@ -1950,6 +2170,8 @@
     e.preventDefault()
     const info = {}
     for (const [k, id] of Object.entries(PF)) { const v = $(id).value.trim(); if (v) info[k] = v }
+    const err = await changeMyName($('pfName').value)
+    if (err) { $('pfNameError').textContent = err; $('pfName').focus(); return }
     const cur = profiles.get(myName) || myProfile()
     closeEditProfile()
     await publishProfile({ pic: cur.pic || null, info })

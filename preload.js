@@ -10,6 +10,7 @@ contextBridge.exposeInMainWorld('chat', {
   send: (text, extra) => ipcRenderer.invoke('send', text, extra),
   sendDm: (toName, text, files, extra) => ipcRenderer.invoke('dm', toName, text, files, extra),
   editMessage: (target, text) => ipcRenderer.invoke('msg:edit', target, text),
+  renameMe: (from, to) => ipcRenderer.invoke('me:rename', from, to),
   deleteMessage: target => ipcRenderer.invoke('msg:delete', target),
   addFile: (bytes, name, mime, relPath) => ipcRenderer.invoke('file:add', bytes, name, mime, relPath),
   getFile: ref => ipcRenderer.invoke('file:get', ref),

@@ -41,6 +41,7 @@ const methods = {
   send: (text, extra) => core.send(text, extra),
   sendDm: (toName, text, files, extra) => core.sendDm(toName, text, files, extra),
   editMessage: (target, text) => core.editMessage(target, text),
+  renameMe: (from, to) => core.renameMe(from, to),
   deleteMessage: target => core.deleteMessage(target),
   // Files picked by the Java side are copied into <dataDir>/import first (no big strings over IPC).
   addFileFromPath: (p, name, mime, relPath) => {

@@ -14,7 +14,7 @@ const MAX_FILE = 50 * 1024 * 1024 // per attached file
 const MAX_FILES = 50              // per message
 const CHUNK = 256 * 1024          // file transfer piece size
 const WANT_TIMEOUT = 60000        // give up fetching a file after this long without progress
-const SETTINGS_KEYS = ['name', 'invite', 'lastUsed', 'rooms', 'pfp', 'profile'] // rooms = JSON list of remembered invites
+const SETTINGS_KEYS = ['name', 'invite', 'lastUsed', 'rooms', 'pfp', 'profile', 'lastRead', 'renames'] // rooms = JSON list of remembered invites
 
 // ---- Crypto helpers (SHA-256 based, identical on every runtime) -------------
 function sha256 (...parts) {
@@ -100,6 +100,8 @@ function validMeta (m) {
 //  - kind 'del': the author deleted their message { target }. Everyone wipes the target's text and
 //    files (it becomes a tombstone { deleted: true }), so it's really gone, not just hidden.
 //    DMs do the same inside the encrypted payload ({ edit } / { del }).
+//  - kind 'rename': someone changed their display name { from, to } (authored as the new name). Apps show
+//    everything by `from` under `to`. Names were never authenticated, so this is a convenience, not proof.
 //  - ch: the channel a message belongs to (missing = 'general').
 //  - files: attachments [{ h: blob hash, k: blob key, n: name, s: size, m: mime, p?: path in a folder }].
 //    Blobs are encrypted with their own random key (secretbox) and fetched from peers by hash;
@@ -157,6 +159,10 @@ function validMsg (m) {
   }
   if (m.kind === 'key') return isHex(m.pk, 64)
   if (m.kind === 'edit' || m.kind === 'del') return isId(m.target)
+  if (m.kind === 'rename') {
+    return typeof m.from === 'string' && typeof m.to === 'string' && m.from.trim() && m.to.trim() &&
+      m.from.length <= 40 && m.to.length <= 40 && m.from !== m.to
+  }
   // Profile picture of the author / picture of the room: { pic: file ref or null }, newest wins.
   if (m.kind === 'profile' || m.kind === 'roompic') {
     return (m.pic === null || !!cleanFiles([m.pic])) && (m.info === undefined || !!cleanInfo(m.info))
@@ -210,6 +216,7 @@ function createCore ({ fs, dataDir, emit }) {
       if (m.ch) e.ch = m.ch
       if (m.files && !e.deleted) e.files = cleanFiles(m.files)
       if (m.kind === 'edit' || m.kind === 'del') Object.assign(e, { kind: m.kind, target: m.target })
+      if (m.kind === 'rename') Object.assign(e, { kind: 'rename', from: m.from, to: m.to })
       if (m.kind === 'react') Object.assign(e, { kind: 'react', target: m.target, emoji: m.emoji, on: m.on })
       if (m.kind === 'chan') Object.assign(e, { kind: 'chan', target: m.target, chName: cleanChannel(m.chName), deleted: m.deleted })
       if (m.kind === 'key') Object.assign(e, { kind: 'key', pk: m.pk })
@@ -228,14 +235,25 @@ function createCore ({ fs, dataDir, emit }) {
   }
 
   // Wipe messages their authors deleted (and the edits of them). Only the author's own 'del' counts.
+  // Display name after renames (old -> new), so "your own message" still matches after you renamed.
+  function nameResolver () {
+    const al = new Map()
+    for (const h of history) {
+      if (h.kind !== 'rename' || h.name !== h.to) continue
+      const p = al.get(h.from)
+      if (!p || p.ts < h.ts) al.set(h.from, { to: h.to, ts: h.ts })
+    }
+    return n => { let x = n; for (let i = 0; i < 10 && al.has(x); i++) x = al.get(x).to; return x }
+  }
   function applyDeletes () {
+    const disp = nameResolver()
     const dels = new Map()
-    for (const h of history) if (h.kind === 'del') dels.set(h.target + '\n' + h.name, true)
+    for (const h of history) if (h.kind === 'del') dels.set(h.target + '\n' + disp(h.name), true)
     if (!dels.size) return
     const byId = new Map(history.map(h => [h.id, h]))
     for (const h of history) {
-      const isTarget = !h.kind && !h.deleted && dels.has(h.id + '\n' + h.name)
-      const isEditOf = h.kind === 'edit' && h.text && dels.has(h.target + '\n' + h.name)
+      const isTarget = !h.kind && !h.deleted && dels.has(h.id + '\n' + disp(h.name))
+      const isEditOf = h.kind === 'edit' && h.text && dels.has(h.target + '\n' + disp(h.name))
       if (isTarget) {
         for (const f of h.files || []) { if (!stillUsed(f.h, h.id, byId)) { try { fs.unlinkSync(blobPath(f.h)) } catch {} } }
         h.text = ''
@@ -452,7 +470,7 @@ function createCore ({ fs, dataDir, emit }) {
           if (isId(o.del)) del = o.del
         } catch {}
       }
-      const v = { id: m.id, name: m.name, ts: m.ts, kind: 'dm', peer, text }
+      const v = { id: m.id, name: m.name, ts: m.ts, kind: 'dm', peer, to: m.toName, text }
       if (files) v.files = files
       if (edit) v.edit = edit
       if (del) v.del = del
@@ -621,6 +639,13 @@ function createCore ({ fs, dataDir, emit }) {
     return m
   }
 
+  // You changed your display name (call after rejoining with the new name).
+  function renameMe (from, to) {
+    from = String(from || '').slice(0, 40); to = String(to || '').slice(0, 40)
+    if (!me || !from.trim() || !to.trim() || from === to) return null
+    return publish({ id: newId(), name: me.name, ts: Date.now(), kind: 'rename', from, to, text: '' })
+  }
+
   // Create (new id), rename or delete a channel. Everyone in the room can.
   function setChannel (target, chName, deleted) {
     chName = cleanChannel(chName)
@@ -667,7 +692,7 @@ function createCore ({ fs, dataDir, emit }) {
     for (const k of SETTINGS_KEYS) {
       if (!changes || !(k in changes)) continue
       if (changes[k] === null) delete s[k]
-      else s[k] = String(changes[k]).slice(0, k === 'rooms' ? 40000 : k === 'profile' ? 4000 : 1000)
+      else s[k] = String(changes[k]).slice(0, k === 'rooms' || k === 'lastRead' ? 60000 : k === 'profile' ? 4000 : 1000)
     }
     writeJSON('settings.json', s)
   }
@@ -693,7 +718,7 @@ function createCore ({ fs, dataDir, emit }) {
     }
   }
 
-  return { join, leave, send, sendDm, editMessage, deleteMessage, addFile, getFile, setPicture, react, setChannel, createChannel, renameRoom, createInvite: makeInvite, checkInvite, getSettings, setSettings, debugInfo }
+  return { join, leave, send, sendDm, renameMe, editMessage, deleteMessage, addFile, getFile, setPicture, react, setChannel, createChannel, renameRoom, createInvite: makeInvite, checkInvite, getSettings, setSettings, debugInfo }
 }
 
 module.exports = { createCore, parseInvite, makeInvite, hmacSha256, hkdf32 }
