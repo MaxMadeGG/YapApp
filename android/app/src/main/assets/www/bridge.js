@@ -78,6 +78,7 @@
     getSettings: () => call('getSettings'),
     setSettings: changes => call('setSettings', changes),
     copy: text => Promise.resolve(window.YapNative.copy(String(text))),
+    openUrl: url => Promise.resolve(window.YapNative.openUrl(String(url))),
     version: () => Promise.resolve(window.YapNative.version()),
     installUpdate: () => window.YapNative.installUpdate(), // system installer asks to confirm
     on: (channel, fn) => { (listeners[channel] = listeners[channel] || []).push(fn) }

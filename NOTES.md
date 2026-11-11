@@ -114,6 +114,10 @@ README.md has install/build details; this file is "where things stand".
   DM peers (core view now passes `to`). core.applyDeletes() follows renames too. Old names kept in settings
   'renames' and re-announced in every room you join that knew you by them. Taken / reserved names refused.
   Other devices keep their own settings name (they show up under the new name via the alias).
+- Links (2026-11-11): richText's token regex starts with URL | email groups (so @/# inside URLs stay part of the
+  link); trailing punctuation trimmed. Clicks go to chat.openUrl -> Electron shell.openExternal / Android
+  ACTION_VIEW intent (http/https/mailto only). Electron also blocks in-window navigation (will-navigate +
+  setWindowOpenHandler); Android WebViewClient.shouldOverrideUrlLoading does the same.
 - Ideas next: unread badges for other ROOMS (needs multi-room core), more emojis, edit/delete messages,
   remember last channel per room.
 

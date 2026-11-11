@@ -270,6 +270,10 @@
   .threadCard .tcFoot { padding: 6px 14px 10px 60px; }
   .threadCard .tcFoot button { padding: 4px 12px; font-size: 13px; }
 
+  /* Links */
+  a.link { color: #8fb0ff; text-decoration: none; word-break: break-all; }
+  a.link:hover { text-decoration: underline; }
+
   /* Mentions */
   .mention { background: #243a6b; color: #b9cdff; border-radius: 4px; padding: 0 3px; font-weight: 600; }
   .mention.me { background: #5a4712; color: #ffd56a; }
@@ -2241,7 +2245,7 @@
       tokenKey = key
       const who = ['everyone', 'channel', 'here', ...names].map(reEsc).join('|')
       const ch = chans.length ? chans.map(reEsc).join('|') : '(?!)'
-      tokenRe = new RegExp(`(:[a-z0-9_+-]{1,32}:)|(^|[^\\w@])@(${who})${END}|(^|[^\\w#&])#(${ch})${END}`, 'gi')
+      tokenRe = new RegExp(`((?:https?:\\/\\/|www\\.)[^\\s<>"]+)|([\\w.+-]+@[\\w-]+(?:\\.[\\w-]+)+)|(:[a-z0-9_+-]{1,32}:)|(^|[^\\w@])@(${who})${END}|(^|[^\\w#&])#(${ch})${END}`, 'gi')
     }
     tokenRe.lastIndex = 0
     return tokenRe
@@ -2256,9 +2260,26 @@
   // Message text: custom emojis -> pictures, @mentions -> tags, #channels -> links.
   function richText (el, text) {
     let last = 0, onlyEmoji = true, any = false
-    for (const m of text.matchAll(tokenRegex())) {
-      let node, start = m.index
-      if (m[1]) {
+    for (const g of text.matchAll(tokenRegex())) {
+      // groups: 1 link, 2 email, then (shifted by 2) emoji, @prefix, name, #prefix, channel
+      const m = [g[0], g[3], g[4], g[5], g[6], g[7]]
+      m.index = g.index
+      let node, start = m.index, end = m.index + g[0].length
+      if (g[1] || g[2]) {
+        let raw = g[1] || g[2]
+        // leave trailing punctuation out of the link ("see example.com." / "(www.x.com)")
+        while (/[.,;:!?'"\]]$/.test(raw) || (raw.endsWith(')') && !raw.includes('('))) raw = raw.slice(0, -1)
+        if (!raw || (g[1] && raw.length < 8)) continue
+        const url = g[2] ? 'mailto:' + raw : (/^www\./i.test(raw) ? 'https://' + raw : raw)
+        node = document.createElement('a')
+        node.className = 'link'
+        node.href = url
+        node.title = url
+        node.textContent = raw
+        node.addEventListener('click', e => { e.preventDefault(); e.stopPropagation(); chat.openUrl(url) })
+        end = start + raw.length
+        onlyEmoji = false
+      } else if (m[1]) {
         if (!isCustom(m[1])) continue
         node = emojiNode(m[1])
       } else if (m[3]) {
@@ -2285,7 +2306,7 @@
         onlyEmoji = false
       } else continue
       el.append(text.slice(last, start), node)
-      last = m.index + m[0].length
+      last = end
       any = true
     }
     el.append(text.slice(last))

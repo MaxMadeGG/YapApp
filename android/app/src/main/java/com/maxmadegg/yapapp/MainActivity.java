@@ -108,6 +108,15 @@ public class MainActivity extends Activity {
     webView.setWebViewClient(new WebViewClient() {
       @Override
       public void onPageFinished(WebView view, String url) { showUpdate(); }
+
+      // Never navigate the app's WebView away: real links go to the browser.
+      @Override
+      public boolean shouldOverrideUrlLoading(WebView view, android.webkit.WebResourceRequest req) {
+        String u = req.getUrl().toString();
+        if (u.startsWith("file:")) return false;
+        openExternal(u);
+        return true;
+      }
     });
     updater = new Updater(this);
 
@@ -177,6 +186,12 @@ public class MainActivity extends Activity {
 
     @JavascriptInterface
     public void installUpdate() { updater.install(); }
+
+    /** Open a web or mailto link in the phone's browser / mail app. */
+    @JavascriptInterface
+    public void openUrl(String url) {
+      mainHandler.post(() -> openExternal(url));
+    }
 
     /** System file picker (several files); result goes to window.__yapPicked. */
     @JavascriptInterface
@@ -259,6 +274,15 @@ public class MainActivity extends Activity {
       } catch (Exception e) {
         return "?";
       }
+    }
+  }
+
+  private void openExternal(String url) {
+    if (url == null || !(url.startsWith("http://") || url.startsWith("https://") || url.startsWith("mailto:"))) return;
+    try {
+      startActivity(new Intent(Intent.ACTION_VIEW, Uri.parse(url)).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));
+    } catch (Exception e) {
+      Log.w("YapApp", "no app to open " + url, e);
     }
   }
 

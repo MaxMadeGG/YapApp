@@ -1,6 +1,6 @@
 // Electron host: window, IPC to the UI, clipboard and self-update.
 // All chat logic lives in core.js (shared with the Android app).
-const { app, BrowserWindow, ipcMain, clipboard, dialog } = require('electron')
+const { app, BrowserWindow, ipcMain, clipboard, dialog, shell } = require('electron')
 const path = require('path')
 const fs = require('fs')
 const { createCore } = require('./core.js')
@@ -76,6 +76,8 @@ ipcMain.handle('invite:create', (e, roomName) => getCore().createInvite(roomName
 ipcMain.handle('invite:check', (e, code) => getCore().checkInvite(code))
 ipcMain.handle('clipboard:write', (e, text) => clipboard.writeText(String(text)))
 ipcMain.handle('app:version', () => app.getVersion())
+const isWebLink = u => /^(https?:|mailto:)/i.test(String(u))
+ipcMain.handle('open:url', (e, url) => { if (isWebLink(url)) shell.openExternal(String(url)) })
 ipcMain.handle('win:focus', () => { if (!win) return; if (win.isMinimized()) win.restore(); win.show(); win.focus() })
 
 // Self-update from the rolling "latest" GitHub release (feed URL is in
@@ -110,6 +112,9 @@ app.whenReady().then(() => {
     }
   })
   win.loadFile('index.html')
+  // Links open in the normal browser; the app window itself never navigates away.
+  win.webContents.setWindowOpenHandler(({ url }) => { if (isWebLink(url)) shell.openExternal(url); return { action: 'deny' } })
+  win.webContents.on('will-navigate', (e, url) => { if (!url.startsWith('file:')) { e.preventDefault(); if (isWebLink(url)) shell.openExternal(url) } })
   // Test hook: YAPAPP_AUTOJOIN="name|invite" joins without the UI.
   if (process.env.YAPAPP_AUTOJOIN) {
     const [n, invite] = process.env.YAPAPP_AUTOJOIN.split('|')
