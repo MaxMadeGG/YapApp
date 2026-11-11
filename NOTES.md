@@ -103,6 +103,11 @@ README.md has install/build details; this file is "where things stand".
   remember last channel per room.
 
 ## Gotchas
+- Build size (2026-11-11): AppImage ~101 MB, exe ~115 MB - almost all of it is Electron/Chromium itself.
+  package.json build: electronLanguages (5 locales), compression maximum, per-platform `files` that exclude
+  other systems' native prebuilds. QUIRK: a platform `files` list with ONLY "!" patterns packs EVERYTHING
+  (got a 513 MB installer) - always repeat the explicit file list there. Going much smaller would need a
+  Tauri-style host (system webview) - big rewrite, not started.
 - TEST WITH `YAPAPP_DATA=<dir>` (main.js) - otherwise the dev app uses the user's REAL settings/history
   (%APPDATA%/YapApp; setting APPDATA does NOT redirect Electron).
 - Bare Kit pinned v2.5.5 + bare-pack/bare-link ^1 (`--needs libbare-kit.so`); worklet global is `BareKit.IPC`.
