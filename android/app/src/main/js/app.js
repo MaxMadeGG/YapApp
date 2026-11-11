@@ -38,7 +38,8 @@ const methods = {
     Object.assign(status, { name: null, room: null, peers: 0 })
     sendStatus()
   },
-  send: text => core.send(text),
+  send: (text, extra) => core.send(text, extra),
+  react: (target, emoji, on) => core.react(target, emoji, on),
   renameRoom: name => core.renameRoom(name),
   createInvite: name => core.createInvite(name),
   checkInvite: code => core.checkInvite(code),

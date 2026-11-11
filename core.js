@@ -81,9 +81,22 @@ function validMeta (m) {
     typeof m.ts === 'number' && Number.isFinite(m.ts) && typeof m.by === 'string'
 }
 
+// Every history entry is a "message"; two optional extras ride along so they sync
+// by id like everything else:
+//  - parent: id of the message this is a thread reply to
+//  - kind 'react': a reaction toggle { target, emoji, on } (newest per person+emoji wins).
+//    Its text is a readable fallback for apps that predate reactions.
+const isId = v => typeof v === 'string' && v.length > 0 && v.length <= 64
 function validMsg (m) {
-  return m && typeof m.id === 'string' && typeof m.name === 'string' &&
-    typeof m.text === 'string' && typeof m.ts === 'number' && m.text.length <= MAX_TEXT
+  if (!(m && isId(m.id) && typeof m.name === 'string' && typeof m.text === 'string' &&
+    typeof m.ts === 'number' && Number.isFinite(m.ts) && m.text.length <= MAX_TEXT)) return false
+  if (m.parent !== undefined && !isId(m.parent)) return false
+  if (m.kind !== undefined) {
+    if (m.kind !== 'react') return false
+    if (!isId(m.target) || typeof m.emoji !== 'string' || !m.emoji || m.emoji.length > 16 ||
+      typeof m.on !== 'boolean') return false
+  }
+  return true
 }
 
 // ---- The core ----------------------------------------------------------------
@@ -121,7 +134,10 @@ function createCore ({ fs, dataDir, emit }) {
     for (const m of msgs) {
       if (!validMsg(m) || seen.has(m.id)) continue
       seen.add(m.id)
-      history.push({ id: m.id, name: m.name.slice(0, 40), text: m.text, ts: m.ts })
+      const e = { id: m.id, name: m.name.slice(0, 40), text: m.text, ts: m.ts }
+      if (m.parent) e.parent = m.parent
+      if (m.kind === 'react') Object.assign(e, { kind: 'react', target: m.target, emoji: m.emoji, on: m.on })
+      history.push(e)
       added = true
     }
     if (added) {
@@ -281,13 +297,28 @@ function createCore ({ fs, dataDir, emit }) {
     }
   }
 
-  function send (text) {
-    text = String(text).slice(0, MAX_TEXT)
-    if (!me || !text.trim()) return null
-    const m = { id: b4a.toString(randomBytes(16), 'hex'), name: me.name, text, ts: Date.now() }
+  function publish (m) {
     addMessages([m])
     for (const conn of peers.keys()) write(conn, { type: 'msg', msg: m })
     return m
+  }
+  const newId = () => b4a.toString(randomBytes(16), 'hex')
+
+  // extra.parent = reply in that message's thread.
+  function send (text, extra) {
+    text = String(text).slice(0, MAX_TEXT)
+    if (!me || !text.trim()) return null
+    const m = { id: newId(), name: me.name, text, ts: Date.now() }
+    if (extra && isId(extra.parent)) m.parent = extra.parent
+    return publish(m)
+  }
+
+  function react (target, emoji, on) {
+    emoji = String(emoji).slice(0, 16)
+    if (!me || !isId(target) || !emoji) return null
+    on = !!on
+    return publish({ id: newId(), name: me.name, text: (on ? 'reacted ' : 'removed reaction ') + emoji,
+      ts: Date.now(), kind: 'react', target, emoji, on })
   }
 
   function renameRoom (newName) {
@@ -333,7 +364,7 @@ function createCore ({ fs, dataDir, emit }) {
     }
   }
 
-  return { join, leave, send, renameRoom, createInvite: makeInvite, checkInvite, getSettings, setSettings, debugInfo }
+  return { join, leave, send, react, renameRoom, createInvite: makeInvite, checkInvite, getSettings, setSettings, debugInfo }
 }
 
 module.exports = { createCore, parseInvite, makeInvite, hmacSha256, hkdf32 }

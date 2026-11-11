@@ -39,7 +39,12 @@ README.md has install/build details; this file is "where things stand".
   day dividers, avatars, 5-min message grouping; phones get a slide-out drawer (<=700px).
 - Only ONE room is connected at a time (core limitation) - switching rooms = leave + join; notifications only
   for the active room. Leave room = drop from list; log-out icon = forget login, keep list.
-- Ideas next: reactions, threads (need protocol additions), unread badges for other rooms (needs multi-room core).
+- Reactions + threads (2026-11-11): both are ordinary history entries so they sync/gossip by id with no new
+  packet types. Reply = message with `parent`; reaction = `kind:'react'` {target, emoji, on}, newest per
+  person+emoji wins; its `text` ("reacted 👍") is the fallback old clients display. UI keeps byId/reacts/replies
+  maps; replies only show in the thread panel (#thread; full-screen on phones). Android doesn't notify reactions.
+  Verified with two isolated desktop instances (sync both ways, toggle off, saved to disk) + phone-size layout.
+- Ideas next: unread badges for other rooms (needs multi-room core), more emojis, edit/delete messages.
 
 ## Gotchas
 - TEST WITH `YAPAPP_DATA=<dir>` (main.js) - otherwise the dev app uses the user's REAL settings/history

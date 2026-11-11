@@ -122,13 +122,54 @@
   .empty { color: var(--muted); text-align: center; margin-top: 25vh; }
   .empty b { display: block; color: var(--text); font-size: 20px; margin-bottom: 4px; }
 
-  #composer { margin: 0 18px 16px; border: 1px solid var(--line); border-radius: 10px; background: var(--input); }
-  #composer:focus-within { border-color: #4a4d57; }
-  #composer textarea { border: 0; background: none; resize: none; height: 44px; max-height: 180px; padding: 11px 14px 4px; }
-  #composer .tools { display: flex; align-items: center; gap: 8px; padding: 4px 8px 6px 14px; }
-  #composer .hint { flex: 1; color: var(--muted); font-size: 11px; }
-  #sendBtn { padding: 6px 10px; border-radius: 6px; display: inline-flex; }
-  #sendBtn:disabled { background: transparent; color: var(--muted); cursor: default; filter: none; }
+  .composer { margin: 0 18px 16px; border: 1px solid var(--line); border-radius: 10px; background: var(--input); }
+  .composer:focus-within { border-color: #4a4d57; }
+  .composer textarea { border: 0; background: none; resize: none; height: 44px; max-height: 180px; padding: 11px 14px 4px; }
+  .composer .tools { display: flex; align-items: center; gap: 8px; padding: 4px 8px 6px 14px; }
+  .composer .hint { flex: 1; color: var(--muted); font-size: 11px; }
+  .sendBtn { padding: 6px 10px; border-radius: 6px; display: inline-flex; }
+  .sendBtn:disabled { background: transparent; color: var(--muted); cursor: default; filter: none; }
+
+  /* Reactions, hover toolbar, thread summary */
+  .reactions { display: flex; flex-wrap: wrap; gap: 4px; }
+  .reactions:not(:empty) { margin-top: 4px; }
+  .chip { background: var(--input); border: 1px solid var(--line); color: var(--text); border-radius: 999px;
+    padding: 1px 9px; font-size: 13px; font-weight: 600; display: inline-flex; align-items: center; gap: 2px; }
+  .chip.mine { background: #243a6b; border-color: var(--accent); color: #cfe0ff; }
+  .chip.add { color: var(--muted); padding: 1px 7px; }
+  .chip.add svg.i { width: 16px; height: 16px; }
+  .msg .actions { display: none; position: absolute; top: -14px; right: 20px; background: var(--panel);
+    border: 1px solid var(--line); border-radius: 8px; padding: 2px; gap: 2px; z-index: 2; }
+  .msg:hover .actions, .msg.sel .actions { display: flex; }
+  .msg.sel { background: #22242a; }
+  .msg .actions .iconBtn { padding: 5px; }
+  .threadLink { display: flex; align-items: center; gap: 8px; margin-top: 4px; padding: 3px 6px 3px 3px;
+    border-radius: 6px; cursor: pointer; font-size: 13px; width: fit-content; max-width: 100%; }
+  .threadLink:hover { background: var(--panel); outline: 1px solid var(--line); }
+  .threadLink .faces { display: flex; gap: 3px; }
+  .threadLink .count { color: #8fb0ff; font-weight: 700; white-space: nowrap; }
+  .threadLink .when { color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .avatar.tiny { width: 22px; height: 22px; border-radius: 5px; font-size: 11px; }
+  #picker { position: fixed; z-index: 30; display: flex; flex-wrap: wrap; max-width: calc(100vw - 16px); gap: 2px;
+    padding: 5px; background: var(--panel); border: 1px solid var(--line); border-radius: 10px;
+    box-shadow: 0 6px 24px rgba(0,0,0,.45); }
+  #picker.hidden { display: none; }
+  #picker button { background: none; padding: 4px 6px; font-size: 20px; line-height: 1; border-radius: 6px; }
+  #picker button:hover { background: var(--hover); filter: none; }
+
+  /* Thread side panel */
+  #thread { display: none; width: 400px; flex: none; flex-direction: column; border-left: 1px solid var(--line); min-width: 0; }
+  #chat.threadOpen #thread { display: flex; }
+  #thread .roomTitle { gap: 8px; }
+  #thread .roomTitle b { font-size: 17px; }
+  #threadRoom { color: var(--muted); font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  #threadMessages { flex: 1; overflow-y: auto; padding: 8px 0 12px; }
+  #threadMessages .msg { padding-left: 16px; padding-right: 16px; }
+  #threadMessages .msg .actions { right: 14px; }
+  .replyCount { display: flex; align-items: center; gap: 10px; color: var(--muted); font-size: 13px; margin: 10px 16px 2px; }
+  .replyCount::after { content: ""; flex: 1; border-top: 1px solid var(--line); }
+  #thread .composer { margin: 0 14px 14px; }
+  @media (max-width: 1000px) { #thread { width: 340px; } }
   #scrim { display: none; }
 
   /* Phones / narrow windows: sidebar becomes a slide-out drawer */
@@ -144,10 +185,14 @@
     #onlineStack .count { display: none; }
     .msg { padding: 2px 12px; }
     .sys { padding-left: 58px; }
-    #composer { margin: 0 8px 8px; display: flex; align-items: flex-end; }
-    #composer textarea { padding: 10px 12px; }
-    #composer .tools { padding: 4px 6px 6px 0; }
-    #composer .hint { display: none; }
+    .composer, #thread .composer { margin: 0 8px 8px; display: flex; align-items: flex-end; }
+    .composer textarea { padding: 10px 12px; }
+    .composer .tools { padding: 4px 6px 6px 0; }
+    .composer .hint { display: none; }
+    #thread { position: fixed; inset: 0; z-index: 15; width: auto; background: var(--bg); border: 0; }
+    .msg .actions { right: 10px; }
+    #picker:not(.hidden) { display: grid; grid-template-columns: repeat(5, auto); }
+    #picker button { font-size: 24px; padding: 8px 10px; }
     #updateBar, #inviteBar { padding: 8px 12px; }
     #inviteBar .top { flex-wrap: wrap; }
     #inviteBar .top span { flex: 1 1 100%; }
@@ -164,6 +209,8 @@
   <symbol id="i-edit" viewBox="0 0 24 24"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/></symbol>
   <symbol id="i-out" viewBox="0 0 24 24"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9"/></symbol>
   <symbol id="i-x" viewBox="0 0 24 24"><path d="M18 6 6 18M6 6l12 12"/></symbol>
+  <symbol id="i-smile" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M8.5 14.5s1.3 1.8 3.5 1.8 3.5-1.8 3.5-1.8M9 9.5h.01M15 9.5h.01"/></symbol>
+  <symbol id="i-thread" viewBox="0 0 24 24"><path d="M21 12a8 8 0 0 1-11.6 7.1L3 21l1.9-6.4A8 8 0 1 1 21 12z"/></symbol>
 </svg>
 
 <section id="join">
@@ -238,14 +285,28 @@
       <code id="inviteCode"></code>
     </div>
     <div id="messages"></div>
-    <form id="composer">
+    <form id="composer" class="composer">
       <textarea id="input" rows="1"></textarea>
       <div class="tools">
         <span class="hint">Enter to send · Shift+Enter for a new line</span>
-        <button type="submit" id="sendBtn" title="Send" disabled><svg class="i"><use href="#i-send"/></svg></button>
+        <button type="submit" id="sendBtn" class="sendBtn" title="Send" disabled><svg class="i"><use href="#i-send"/></svg></button>
       </div>
     </form>
   </main>
+  <section id="thread">
+    <header>
+      <div class="roomTitle"><b>Thread</b><span id="threadRoom"></span></div>
+      <button class="iconBtn" id="closeThread" title="Close thread"><svg class="i"><use href="#i-x"/></svg></button>
+    </header>
+    <div id="threadMessages"></div>
+    <form id="threadComposer" class="composer">
+      <textarea id="threadInput" rows="1"></textarea>
+      <div class="tools">
+        <span class="hint"></span>
+        <button type="submit" id="threadSend" class="sendBtn" title="Send" disabled><svg class="i"><use href="#i-send"/></svg></button>
+      </div>
+    </form>
+  </section>
 </section>
 
 <script>
@@ -327,28 +388,139 @@
     return messagesEl.scrollHeight - messagesEl.scrollTop - messagesEl.clientHeight < 80
   }
 
-  // ---- Messages
-  let last = null // { name, ts } of the previous message, for grouping + day dividers
+  // ---- Messages, reactions, threads
+  // History holds three kinds of entries (see core.js): normal messages, thread
+  // replies (parent = id) and reaction toggles (kind 'react'). Only normal
+  // messages go in the main list; the others decorate them.
+  const EMOJIS = ['👍', '❤️', '😂', '🎉', '😮', '😢', '🔥', '👀', '✅', '🙏']
+  const byId = new Map()     // id -> message (normal + replies)
+  const reacts = new Map()   // target id -> Map(emoji -> Map(name -> { on, ts }))
+  const replies = new Map()  // parent id -> [reply]
+  let openThread = null      // parent id shown in the thread panel
+  let last = null            // { name, ts } of the previous main-list message (grouping + day dividers)
 
-  function addMsg (m, forceScroll) {
-    const stick = forceScroll || nearBottom()
-    messagesEl.querySelector('.empty')?.remove()
-    const newDay = !last || new Date(last.ts).toDateString() !== new Date(m.ts).toDateString()
-    if (newDay) {
-      const d = document.createElement('div')
-      d.className = 'day'
-      const s = document.createElement('span'); s.textContent = dayLabel(m.ts)
-      d.append(s)
-      messagesEl.append(d)
+  // Record a history entry in the maps. Returns false for duplicates / stale toggles.
+  function ingest (m) {
+    if (m.kind === 'react') {
+      if (!reacts.has(m.target)) reacts.set(m.target, new Map())
+      const byEmoji = reacts.get(m.target)
+      if (!byEmoji.has(m.emoji)) byEmoji.set(m.emoji, new Map())
+      const who = byEmoji.get(m.emoji)
+      const prev = who.get(m.name)
+      if (prev && prev.ts >= m.ts) return false
+      who.set(m.name, { on: m.on, ts: m.ts })
+      return true
     }
-    const grouped = !newDay && last && last.name === m.name && m.ts - last.ts < GROUP_MS
+    if (byId.has(m.id)) return false
+    byId.set(m.id, m)
+    if (m.parent) {
+      if (!replies.has(m.parent)) replies.set(m.parent, [])
+      const list = replies.get(m.parent)
+      list.push(m)
+      list.sort((a, b) => a.ts - b.ts)
+    }
+    return true
+  }
+
+  function reactionList (id) {
+    const out = []
+    for (const [emoji, who] of reacts.get(id) || []) {
+      const names = [...who].filter(([, v]) => v.on).map(([n]) => n)
+      if (names.length) out.push({ emoji, names, mine: names.includes(myName) })
+    }
+    return out
+  }
+
+  async function toggleReaction (id, emoji, on) {
+    const m = await chat.react(id, emoji, on)
+    if (m) { addMsg(m); touchSession() }
+  }
+
+  // Emoji picker: one floating panel shared by every message.
+  const picker = document.createElement('div')
+  picker.id = 'picker'
+  picker.className = 'hidden'
+  let pickerFor = null
+  for (const e of EMOJIS) {
+    const b = document.createElement('button')
+    b.type = 'button'; b.textContent = e
+    b.addEventListener('click', () => {
+      const id = pickerFor; closePicker()
+      const mine = reactionList(id).find(r => r.emoji === e)?.mine
+      toggleReaction(id, e, !mine)
+    })
+    picker.append(b)
+  }
+  document.body.append(picker)
+  function openPicker (id, anchor) {
+    pickerFor = id
+    picker.classList.remove('hidden')
+    const r = anchor.getBoundingClientRect()
+    const w = picker.offsetWidth, h = picker.offsetHeight
+    picker.style.left = Math.max(8, Math.min(r.right - w, innerWidth - w - 8)) + 'px'
+    picker.style.top = (r.top - h - 6 > 8 ? r.top - h - 6 : r.bottom + 6) + 'px'
+  }
+  function closePicker () { picker.classList.add('hidden'); pickerFor = null }
+  document.addEventListener('pointerdown', e => {
+    if (!picker.contains(e.target) && !e.target.closest('.reactBtn')) closePicker()
+    if (!e.target.closest('.msg') && !picker.contains(e.target)) {
+      document.querySelectorAll('.msg.sel').forEach(x => x.classList.remove('sel'))
+    }
+  })
+
+  function iconBtn (cls, title, icon) {
+    const b = document.createElement('button')
+    b.type = 'button'; b.className = cls; b.title = title
+    b.innerHTML = `<svg class="i"><use href="${icon}"/></svg>`
+    return b
+  }
+
+  // Reaction chips + thread summary under a message (re-rendered on changes).
+  function renderExtras (el) {
+    const id = el.dataset.id
+    const box = el.querySelector('.reactions')
+    box.innerHTML = ''
+    const list = reactionList(id)
+    for (const r of list) {
+      const c = document.createElement('button')
+      c.type = 'button'
+      c.className = 'chip' + (r.mine ? ' mine' : '')
+      c.title = r.names.join(', ') + ' reacted with ' + r.emoji
+      c.textContent = r.emoji + ' ' + r.names.length
+      c.addEventListener('click', () => toggleReaction(id, r.emoji, !r.mine))
+      box.append(c)
+    }
+    if (list.length) {
+      const add = iconBtn('chip add reactBtn', 'Add reaction', '#i-smile')
+      add.addEventListener('click', () => openPicker(id, add))
+      box.append(add)
+    }
+    const th = el.querySelector('.threadLink')
+    if (!th) return
+    const reps = replies.get(id) || []
+    th.innerHTML = ''
+    th.classList.toggle('hidden', !reps.length)
+    if (!reps.length) return
+    const faces = document.createElement('span'); faces.className = 'faces'
+    for (const n of [...new Set(reps.map(r => r.name))].slice(0, 3)) faces.append(avatar(n, 'tiny'))
+    const a = document.createElement('span'); a.className = 'count'
+    a.textContent = reps.length === 1 ? '1 reply' : reps.length + ' replies'
+    const lastRep = reps[reps.length - 1]
+    const day = dayLabel(lastRep.ts)
+    const t = document.createElement('span'); t.className = 'when'
+    t.textContent = 'Last reply ' + (day === 'Today' || day === 'Yesterday' ? day.toLowerCase() : day) + ' at ' + timeOf(lastRep.ts)
+    th.append(faces, a, t)
+  }
+  function refresh (id) { document.querySelectorAll(`.msg[data-id="${id}"]`).forEach(renderExtras) }
+
+  // One message row. opts.grouped = no avatar/name; opts.thread = row in the thread panel.
+  function msgEl (m, opts) {
     const div = document.createElement('div')
-    div.className = 'msg' + (grouped ? '' : ' first')
-    const gutter = document.createElement('div')
-    gutter.className = 'gutter'
-    const body = document.createElement('div')
-    body.className = 'body'
-    if (grouped) {
+    div.className = 'msg' + (opts.grouped ? '' : ' first')
+    div.dataset.id = m.id
+    const gutter = document.createElement('div'); gutter.className = 'gutter'
+    const body = document.createElement('div'); body.className = 'body'
+    if (opts.grouped) {
       const st = document.createElement('div'); st.className = 'stamp'; st.textContent = timeOf(m.ts)
       gutter.append(st)
     } else {
@@ -360,14 +532,61 @@
       head.append(n, t)
       body.append(head)
     }
-    const text = document.createElement('div')
-    text.className = 'text'
-    text.textContent = m.text
-    body.append(text)
-    div.append(gutter, body)
-    messagesEl.append(div)
+    const text = document.createElement('div'); text.className = 'text'; text.textContent = m.text
+    const rx = document.createElement('div'); rx.className = 'reactions'
+    body.append(text, rx)
+    if (!opts.thread) {
+      const th = document.createElement('div'); th.className = 'threadLink hidden'
+      th.addEventListener('click', () => showThread(m.id))
+      body.append(th)
+    }
+    // Hover toolbar (tap the message on phones).
+    const bar = document.createElement('div'); bar.className = 'actions'
+    const rb = iconBtn('iconBtn reactBtn', 'Add reaction', '#i-smile')
+    rb.addEventListener('click', e => { e.stopPropagation(); openPicker(m.id, rb) })
+    bar.append(rb)
+    if (!opts.thread) {
+      const tb = iconBtn('iconBtn', 'Reply in thread', '#i-thread')
+      tb.addEventListener('click', e => { e.stopPropagation(); showThread(m.id) })
+      bar.append(tb)
+    }
+    div.append(gutter, body, bar)
+    div.addEventListener('click', e => {
+      if (!IS_PHONE || e.target.closest('button, .threadLink')) return
+      const was = div.classList.contains('sel')
+      document.querySelectorAll('.msg.sel').forEach(x => x.classList.remove('sel'))
+      if (!was) div.classList.add('sel')
+    })
+    renderExtras(div)
+    return div
+  }
+
+  // Append a normal message to the main list.
+  function appendMain (m, stick) {
+    messagesEl.querySelector('.empty')?.remove()
+    const newDay = !last || new Date(last.ts).toDateString() !== new Date(m.ts).toDateString()
+    if (newDay) {
+      const d = document.createElement('div'); d.className = 'day'
+      const s = document.createElement('span'); s.textContent = dayLabel(m.ts)
+      d.append(s)
+      messagesEl.append(d)
+    }
+    const grouped = !newDay && last && last.name === m.name && m.ts - last.ts < GROUP_MS
+    messagesEl.append(msgEl(m, { grouped }))
     last = { name: m.name, ts: m.ts }
     if (stick) messagesEl.scrollTop = messagesEl.scrollHeight
+  }
+
+  // A new entry from us or a peer.
+  function addMsg (m, forceScroll) {
+    if (!ingest(m)) return
+    if (m.kind === 'react') { refresh(m.target); return }
+    if (m.parent) {
+      refresh(m.parent)
+      if (openThread === m.parent) renderThread(forceScroll)
+      return
+    }
+    appendMain(m, forceScroll || nearBottom())
   }
 
   function addSys (text) {
@@ -380,18 +599,60 @@
   }
 
   function renderHistory (list) {
+    byId.clear(); reacts.clear(); replies.clear()
+    for (const m of list) ingest(m)
     messagesEl.innerHTML = ''
     last = null
-    if (!list.length) {
+    const top = list.filter(m => m.kind !== 'react' && !m.parent)
+    if (!top.length) {
       const e = document.createElement('div')
       e.className = 'empty'
       const b = document.createElement('b'); b.textContent = $('roomLabel').textContent
       e.append(b, 'This is the very beginning of the room. Say hi!')
       messagesEl.append(e)
-      return
     }
-    for (const m of list) addMsg(m, true)
+    for (const m of top) appendMain(m, false)
+    messagesEl.scrollTop = messagesEl.scrollHeight
+    if (openThread && byId.has(openThread)) renderThread(false)
+    else closeThread()
   }
+
+  // ---- Thread panel
+  function showThread (id) {
+    openThread = id
+    closePicker()
+    $('chat').classList.add('threadOpen')
+    renderThread(true)
+    if (!IS_PHONE) $('threadInput').focus()
+  }
+  function closeThread () {
+    openThread = null
+    $('chat').classList.remove('threadOpen')
+  }
+  function renderThread (stick) {
+    const box = $('threadMessages')
+    const parent = byId.get(openThread)
+    if (!parent) return
+    const keep = !stick && box.scrollHeight - box.scrollTop - box.clientHeight > 80 ? box.scrollTop : null
+    box.innerHTML = ''
+    box.append(msgEl(parent, { thread: true }))
+    const reps = replies.get(openThread) || []
+    const d = document.createElement('div'); d.className = 'replyCount'
+    const s = document.createElement('span')
+    s.textContent = reps.length ? (reps.length === 1 ? '1 reply' : reps.length + ' replies') : 'No replies yet'
+    d.append(s)
+    box.append(d)
+    let prev = null
+    for (const r of reps) {
+      const grouped = prev && prev.name === r.name && r.ts - prev.ts < GROUP_MS
+      box.append(msgEl(r, { thread: true, grouped }))
+      prev = r
+    }
+    $('threadRoom').textContent = $('roomLabel').textContent
+    $('threadInput').placeholder = 'Reply…'
+    box.scrollTop = keep === null ? box.scrollHeight : keep
+  }
+  $('closeThread').addEventListener('click', closeThread)
 
   chat.on('history', renderHistory)
   // Keep the newest message in view when the list resizes (phone keyboard, composer growing).
@@ -571,30 +832,31 @@
   $('menuBtn').addEventListener('click', () => $('chat').classList.add('drawer'))
   $('scrim').addEventListener('click', closeDrawer)
 
-  // ---- Composer
-  const input = $('input')
-  function autosize () {
-    input.style.height = 'auto'
-    input.style.height = Math.min(input.scrollHeight, 180) + 'px'
-    $('sendBtn').disabled = !input.value.trim()
+  // ---- Composers (main + thread). Phones: Enter is a new line, the Send button sends.
+  function setupComposer (form, box, btn, parentId) {
+    const autosize = () => {
+      box.style.height = 'auto'
+      box.style.height = Math.min(box.scrollHeight, 180) + 'px'
+      btn.disabled = !box.value.trim()
+    }
+    const sendIt = async () => {
+      const text = box.value
+      if (!text.trim()) return
+      box.value = ''
+      autosize()
+      const parent = parentId()
+      const m = await chat.send(text, parent ? { parent } : undefined)
+      if (m) { addMsg(m, true); touchSession() }
+    }
+    box.addEventListener('input', autosize)
+    form.addEventListener('submit', e => { e.preventDefault(); sendIt(); if (IS_PHONE) box.focus() })
+    if (IS_PHONE) box.setAttribute('enterkeyhint', 'enter')
+    box.addEventListener('keydown', e => {
+      if (e.key === 'Enter' && !e.shiftKey && !IS_PHONE) { e.preventDefault(); sendIt() }
+    })
   }
-  input.addEventListener('input', autosize)
-
-  async function sendInput () {
-    const text = input.value
-    if (!text.trim()) return
-    input.value = ''
-    autosize()
-    const m = await chat.send(text)
-    if (m) { addMsg(m, true); touchSession() }
-  }
-
-  $('composer').addEventListener('submit', e => { e.preventDefault(); sendInput(); if (IS_PHONE) input.focus() })
-  // Phones: Enter is a new line and the Send button sends (like other chat apps).
-  if (IS_PHONE) input.setAttribute('enterkeyhint', 'enter')
-  input.addEventListener('keydown', e => {
-    if (e.key === 'Enter' && !e.shiftKey && !IS_PHONE) { e.preventDefault(); sendInput() }
-  })
+  setupComposer($('composer'), $('input'), $('sendBtn'), () => null)
+  setupComposer($('threadComposer'), $('threadInput'), $('threadSend'), () => openThread)
 
   // ---- Self-update: the host downloads in the background, we offer a restart.
   chat.version().then(v => { $('version').textContent = 'v' + v })

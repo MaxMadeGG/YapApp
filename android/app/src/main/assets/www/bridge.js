@@ -31,7 +31,8 @@
   window.chat = {
     join: (name, invite) => call('join', name, invite),
     leave: () => call('leave'),
-    send: text => call('send', text),
+    send: (text, extra) => call('send', text, extra),
+    react: (target, emoji, on) => call('react', target, emoji, on),
     renameRoom: name => call('renameRoom', name),
     createInvite: name => call('createInvite', name),
     checkInvite: code => call('checkInvite', code),
