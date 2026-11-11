@@ -75,6 +75,8 @@ function parseInvite (code) {
 }
 
 function cleanRoomName (n) { return String(n).replace(/\s+/g, ' ').trim().slice(0, 40) }
+// Channel names like Slack: lowercase, no spaces.
+function cleanChannel (n) { return String(n).trim().toLowerCase().replace(/\s+/g, '-').replace(/^#+/, '').slice(0, 40) }
 
 function validMeta (m) {
   return m && typeof m.name === 'string' && cleanRoomName(m.name) &&
@@ -85,18 +87,23 @@ function validMeta (m) {
 // by id like everything else:
 //  - parent: id of the message this is a thread reply to
 //  - kind 'react': a reaction toggle { target, emoji, on } (newest per person+emoji wins).
-//    Its text is a readable fallback for apps that predate reactions.
+//  - kind 'chan': a channel's state { target: channel id, chName, deleted } (newest wins).
+//  - ch: the channel a message belongs to (missing = 'general').
+//    The text of react/chan entries is a readable fallback for older apps.
 const isId = v => typeof v === 'string' && v.length > 0 && v.length <= 64
 function validMsg (m) {
   if (!(m && isId(m.id) && typeof m.name === 'string' && typeof m.text === 'string' &&
     typeof m.ts === 'number' && Number.isFinite(m.ts) && m.text.length <= MAX_TEXT)) return false
   if (m.parent !== undefined && !isId(m.parent)) return false
-  if (m.kind !== undefined) {
-    if (m.kind !== 'react') return false
-    if (!isId(m.target) || typeof m.emoji !== 'string' || !m.emoji || m.emoji.length > 16 ||
-      typeof m.on !== 'boolean') return false
+  if (m.ch !== undefined && !isId(m.ch)) return false
+  if (m.kind === 'react') {
+    return isId(m.target) && typeof m.emoji === 'string' && m.emoji.length > 0 && m.emoji.length <= 16 &&
+      typeof m.on === 'boolean'
   }
-  return true
+  if (m.kind === 'chan') {
+    return isId(m.target) && typeof m.chName === 'string' && !!cleanChannel(m.chName) && typeof m.deleted === 'boolean'
+  }
+  return m.kind === undefined
 }
 
 // ---- The core ----------------------------------------------------------------
@@ -136,7 +143,9 @@ function createCore ({ fs, dataDir, emit }) {
       seen.add(m.id)
       const e = { id: m.id, name: m.name.slice(0, 40), text: m.text, ts: m.ts }
       if (m.parent) e.parent = m.parent
+      if (m.ch) e.ch = m.ch
       if (m.kind === 'react') Object.assign(e, { kind: 'react', target: m.target, emoji: m.emoji, on: m.on })
+      if (m.kind === 'chan') Object.assign(e, { kind: 'chan', target: m.target, chName: cleanChannel(m.chName), deleted: m.deleted })
       history.push(e)
       added = true
     }
@@ -310,8 +319,19 @@ function createCore ({ fs, dataDir, emit }) {
     if (!me || !text.trim()) return null
     const m = { id: newId(), name: me.name, text, ts: Date.now() }
     if (extra && isId(extra.parent)) m.parent = extra.parent
+    if (extra && isId(extra.ch) && extra.ch !== 'general') m.ch = extra.ch
     return publish(m)
   }
+
+  // Create (new id), rename or delete a channel. Everyone in the room can.
+  function setChannel (target, chName, deleted) {
+    chName = cleanChannel(chName)
+    if (!me || !isId(target) || !chName) return null
+    deleted = !!deleted && target !== 'general' // #general always stays
+    return publish({ id: newId(), name: me.name, ts: Date.now(), kind: 'chan', target, chName, deleted,
+      text: deleted ? 'deleted channel #' + chName : 'set up channel #' + chName })
+  }
+  function createChannel (chName) { return setChannel(newId(), chName, false) }
 
   function react (target, emoji, on) {
     emoji = String(emoji).slice(0, 16)
@@ -364,7 +384,7 @@ function createCore ({ fs, dataDir, emit }) {
     }
   }
 
-  return { join, leave, send, react, renameRoom, createInvite: makeInvite, checkInvite, getSettings, setSettings, debugInfo }
+  return { join, leave, send, react, setChannel, createChannel, renameRoom, createInvite: makeInvite, checkInvite, getSettings, setSettings, debugInfo }
 }
 
 module.exports = { createCore, parseInvite, makeInvite, hmacSha256, hkdf32 }

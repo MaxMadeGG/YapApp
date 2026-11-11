@@ -44,8 +44,34 @@
 
   /* Chat screen: sidebar | main */
   #chat { height: 100%; display: flex; }
-  aside { width: 260px; background: var(--panel); border-right: 1px solid var(--line);
-    display: flex; flex-direction: column; min-height: 0; }
+  aside { width: 324px; background: var(--panel); border-right: 1px solid var(--line); display: flex; min-height: 0; flex: none; }
+  #rail { width: 64px; flex: none; background: #111216; border-right: 1px solid var(--line); display: flex;
+    flex-direction: column; align-items: center; gap: 10px; padding: 12px 0 10px; overflow-y: auto; }
+  #roomList { display: flex; flex-direction: column; gap: 10px; align-items: center; }
+  .railRoom { width: 40px; height: 40px; border-radius: 10px; display: flex; align-items: center; justify-content: center;
+    font-weight: 800; font-size: 17px; color: #15161a; cursor: pointer; user-select: none; opacity: .75; }
+  .railRoom:hover { opacity: 1; }
+  .railRoom.active { opacity: 1; outline: 2px solid #fff; outline-offset: 2px; }
+  .railAdd { width: 40px; height: 40px; border-radius: 10px; background: var(--hover); color: var(--muted);
+    display: flex; align-items: center; justify-content: center; padding: 0; }
+  .railAdd:hover { color: var(--text); }
+  .railFill { flex: 1; }
+  .sidePanel { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+  #roomName { cursor: pointer; border-radius: 6px; padding: 1px 4px; margin-left: -4px; overflow: hidden;
+    text-overflow: ellipsis; white-space: nowrap; }
+  #roomName:hover { background: var(--hover); }
+  #roomRenameInput { font-weight: 700; font-size: 15px; padding: 3px 6px; margin-bottom: 2px; }
+  .item.unread { color: var(--text); font-weight: 700; }
+  .item .tools { display: none; gap: 0; }
+  .item:hover .tools, .item.active .tools { display: flex; }
+  .item .tools .iconBtn { padding: 2px; color: inherit; opacity: .7; }
+  .item .tools .iconBtn:hover { opacity: 1; background: rgba(255,255,255,.1); }
+  .item .tools svg.i { width: 15px; height: 15px; }
+  .item.confirm { background: #4a1f24; color: var(--text); cursor: default; flex-wrap: wrap; }
+  .item.confirm button { padding: 3px 10px; font-size: 12px; }
+  .item.confirm .danger { background: #d9534f; }
+  #newChannelRow { padding: 2px 6px 4px; }
+  #newChannelInput { padding: 5px 8px; font-size: 14px; }
   .brand { display: flex; align-items: center; gap: 8px; padding: 14px 14px 12px 16px;
     border-bottom: 1px solid var(--line); }
   .brand .title { flex: 1; min-width: 0; }
@@ -180,7 +206,7 @@
   @media (max-width: 700px) {
     #join { align-items: flex-start; padding: 16px; overflow-y: auto; }
     #join form { width: 100%; padding: 20px; }
-    aside { position: fixed; z-index: 20; top: 0; bottom: 0; left: 0; width: 82%; max-width: 300px;
+    aside { position: fixed; z-index: 20; top: 0; bottom: 0; left: 0; width: 90%; max-width: 360px;
       transform: translateX(-100%); transition: transform .2s ease; }
     #chat.drawer aside { transform: none; }
     #chat.drawer #scrim { display: block; position: fixed; inset: 0; z-index: 10; background: rgba(0,0,0,.5); }
@@ -212,6 +238,7 @@
   <symbol id="i-invite" viewBox="0 0 24 24"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M19 8v6M22 11h-6"/></symbol>
   <symbol id="i-edit" viewBox="0 0 24 24"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/></symbol>
   <symbol id="i-out" viewBox="0 0 24 24"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9"/></symbol>
+  <symbol id="i-trash" viewBox="0 0 24 24"><path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6"/></symbol>
   <symbol id="i-x" viewBox="0 0 24 24"><path d="M18 6 6 18M6 6l12 12"/></symbol>
   <symbol id="i-smile" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M8.5 14.5s1.3 1.8 3.5 1.8 3.5-1.8 3.5-1.8M9 9.5h.01M15 9.5h.01"/></symbol>
   <symbol id="i-thread" viewBox="0 0 24 24"><path d="M21 12a8 8 0 0 1-11.6 7.1L3 21l1.9-6.4A8 8 0 1 1 21 12z"/></symbol>
@@ -247,21 +274,33 @@
 
 <section id="chat" class="hidden">
   <aside>
-    <div class="brand">
-      <div class="title"><b>YapApp</b><small id="meLabel"></small></div>
-      <button class="iconBtn" id="logoutBtn" title="Log out"><svg class="i"><use href="#i-out"/></svg></button>
-    </div>
-    <div class="side">
-      <div class="sectionHead">Rooms
-        <button class="iconBtn" id="addRoomBtn" title="Join or create a room"><svg class="i"><use href="#i-plus"/></svg></button>
-      </div>
+    <nav id="rail">
       <div id="roomList"></div>
-      <div class="sectionHead">Online</div>
-      <div id="peers"></div>
-    </div>
-    <div class="sideFoot">
-      <div id="version"></div>
-      <button class="ghost" id="leaveBtn" title="Remove this room from your list">Leave room</button>
+      <button class="railAdd" id="addRoomBtn" title="Join or create a room"><svg class="i"><use href="#i-plus"/></svg></button>
+      <div class="railFill"></div>
+      <button class="iconBtn" id="logoutBtn" title="Log out"><svg class="i"><use href="#i-out"/></svg></button>
+    </nav>
+    <div class="sidePanel">
+      <div class="brand">
+        <div class="title">
+          <b id="roomName" title="Click to rename the room"></b>
+          <input id="roomRenameInput" class="hidden" maxlength="40" autocomplete="off">
+          <small id="meLabel"></small>
+        </div>
+      </div>
+      <div class="side">
+        <div class="sectionHead">Channels
+          <button class="iconBtn" id="addChannelBtn" title="Add a channel"><svg class="i"><use href="#i-plus"/></svg></button>
+        </div>
+        <div id="channelList"></div>
+        <div id="newChannelRow" class="hidden"><input id="newChannelInput" maxlength="40" autocomplete="off" placeholder="new-channel-name"></div>
+        <div class="sectionHead">Online</div>
+        <div id="peers"></div>
+      </div>
+      <div class="sideFoot">
+        <div id="version"></div>
+        <button class="ghost" id="leaveBtn" title="Remove this room from your list">Leave room</button>
+      </div>
     </div>
   </aside>
   <div id="scrim"></div>
@@ -269,7 +308,7 @@
     <header>
       <button class="iconBtn" id="menuBtn" title="Rooms"><svg class="i"><use href="#i-menu"/></svg></button>
       <div class="roomTitle">
-        <div id="roomLabel" title="Click to rename"></div>
+        <div id="roomLabel" title="Click to rename the channel"></div>
         <input id="renameInput" class="hidden" maxlength="40" autocomplete="off">
       </div>
       <div id="onlineStack" title="Online now"><div class="faces"></div><span class="count"></span></div>
@@ -358,11 +397,12 @@
     const box = $('roomList')
     box.innerHTML = ''
     for (const r of rooms) {
+      const name = r.name || 'room'
       const div = document.createElement('div')
-      div.className = 'item' + (keyOf(r.invite) === current ? ' active' : '')
-      const h = document.createElement('span'); h.className = 'hash'; h.textContent = '#'
-      const l = document.createElement('span'); l.className = 'label'; l.textContent = r.name || 'room'
-      div.append(h, l)
+      div.className = 'railRoom' + (keyOf(r.invite) === current ? ' active' : '')
+      div.style.background = colorFor(name)
+      div.textContent = (name.trim()[0] || '#').toUpperCase()
+      div.title = name
       div.addEventListener('click', () => {
         closeDrawer()
         if (keyOf(r.invite) !== current) enterRoom(myName, r.invite, false)
@@ -406,10 +446,24 @@
   const reacts = new Map()   // target id -> Map(emoji -> Map(name -> { on, ts }))
   const replies = new Map()  // parent id -> [reply]
   let openThread = null      // parent id shown in the thread panel
+  const GENERAL = 'general'
+  const channels = new Map() // channel id -> { name, ts, deleted }
+  let currentCh = GENERAL
+  const unread = new Set()   // channel ids with new messages from others
+  let entries = []           // every history entry of this room (all channels)
+  const chOf = m => m.ch || GENERAL
+  function resetChannels () { channels.clear(); channels.set(GENERAL, { name: 'general', ts: 0, deleted: false }) }
+  resetChannels()
   let last = null            // { name, ts } of the previous main-list message (grouping + day dividers)
 
   // Record a history entry in the maps. Returns false for duplicates / stale toggles.
   function ingest (m) {
+    if (m.kind === 'chan') {
+      const prev = channels.get(m.target)
+      if (prev && prev.ts >= m.ts) return false
+      channels.set(m.target, { name: m.chName, ts: m.ts, deleted: m.deleted && m.target !== GENERAL })
+      return true
+    }
     if (m.kind === 'react') {
       if (!reacts.has(m.target)) reacts.set(m.target, new Map())
       const byEmoji = reacts.get(m.target)
@@ -589,10 +643,20 @@
   // A new entry from us or a peer.
   function addMsg (m, forceScroll) {
     if (!ingest(m)) return
+    entries.push(m)
+    if (m.kind === 'chan') {
+      if (m.target === currentCh && channels.get(currentCh).deleted) switchChannel(GENERAL)
+      else { renderChannels(); showChannelHeader() }
+      return
+    }
     if (m.kind === 'react') { refresh(m.target); return }
     if (m.parent) {
       refresh(m.parent)
       if (openThread === m.parent) renderThread(forceScroll)
+      return
+    }
+    if (chOf(m) !== currentCh) {
+      if (m.name !== myName) { unread.add(chOf(m)); renderChannels() }
       return
     }
     appendMain(m, forceScroll || nearBottom())
@@ -608,23 +672,110 @@
   }
 
   function renderHistory (list) {
-    byId.clear(); reacts.clear(); replies.clear()
+    entries = list.slice()
+    byId.clear(); reacts.clear(); replies.clear(); resetChannels()
     for (const m of list) ingest(m)
+    const cur = channels.get(currentCh)
+    if (!cur || cur.deleted) currentCh = GENERAL
+    renderChannels()
+    renderMain()
+  }
+
+  function renderMain () {
+    showChannelHeader()
     messagesEl.innerHTML = ''
     last = null
-    const top = list.filter(m => m.kind !== 'react' && !m.parent)
+    const top = entries.filter(m => !m.kind && !m.parent && chOf(m) === currentCh)
     if (!top.length) {
       const e = document.createElement('div')
       e.className = 'empty'
-      const b = document.createElement('b'); b.textContent = $('roomLabel').textContent
-      e.append(b, 'This is the very beginning of the room. Say hi!')
+      const b = document.createElement('b'); b.textContent = '#' + channels.get(currentCh).name
+      e.append(b, 'This is the very beginning of this channel. Say hi!')
       messagesEl.append(e)
     }
     for (const m of top) appendMain(m, false)
     messagesEl.scrollTop = messagesEl.scrollHeight
-    if (openThread && byId.has(openThread)) renderThread(false)
+    if (openThread && byId.has(openThread) && chOf(byId.get(openThread)) === currentCh) renderThread(false)
     else closeThread()
   }
+
+  // ---- Channels (sidebar list, header, add / rename / delete)
+  function showChannelHeader () {
+    const name = channels.get(currentCh).name
+    $('roomLabel').textContent = '# ' + name
+    $('input').placeholder = 'Message #' + name
+    $('threadRoom').textContent = '#' + name
+  }
+
+  function switchChannel (id) {
+    currentCh = id
+    unread.delete(id)
+    closeThread()
+    closeDrawer()
+    renderChannels()
+    renderMain()
+    if (!IS_PHONE) $('input').focus()
+  }
+
+  function renderChannels () {
+    const box = $('channelList')
+    box.innerHTML = ''
+    const list = [...channels].filter(([, c]) => !c.deleted)
+      .sort(([a, x], [b, y]) => (a === GENERAL ? -1 : b === GENERAL ? 1 : x.name.localeCompare(y.name)))
+    for (const [id, c] of list) {
+      const div = document.createElement('div')
+      div.className = 'item' + (id === currentCh ? ' active' : '') + (unread.has(id) ? ' unread' : '')
+      const h = document.createElement('span'); h.className = 'hash'; h.textContent = '#'
+      const l = document.createElement('span'); l.className = 'label'; l.textContent = c.name
+      const tools = document.createElement('span'); tools.className = 'tools'
+      const ren = iconBtn('iconBtn', 'Rename channel', '#i-edit')
+      ren.addEventListener('click', e => { e.stopPropagation(); if (id !== currentCh) switchChannel(id); startRename() })
+      tools.append(ren)
+      if (id !== GENERAL) {
+        const del = iconBtn('iconBtn', 'Delete channel', '#i-trash')
+        del.addEventListener('click', e => { e.stopPropagation(); confirmDelete(div, id, c.name) })
+        tools.append(del)
+      }
+      div.append(h, l, tools)
+      div.addEventListener('click', () => { if (!div.classList.contains('confirm')) switchChannel(id) })
+      box.append(div)
+    }
+  }
+
+  function confirmDelete (div, id, name) {
+    div.className = 'item confirm'
+    div.innerHTML = ''
+    const t = document.createElement('span'); t.className = 'label'; t.textContent = 'Delete #' + name + ' for everyone?'
+    const yes = document.createElement('button'); yes.className = 'danger'; yes.textContent = 'Delete'
+    const no = document.createElement('button'); no.className = 'ghost'; no.textContent = 'Cancel'
+    yes.addEventListener('click', async e => {
+      e.stopPropagation()
+      const m = await chat.setChannel(id, name, true)
+      if (m) addMsg(m)
+    })
+    no.addEventListener('click', e => { e.stopPropagation(); renderChannels() })
+    div.append(t, yes, no)
+  }
+
+  $('addChannelBtn').addEventListener('click', () => {
+    $('newChannelRow').classList.remove('hidden')
+    $('newChannelInput').value = ''
+    $('newChannelInput').focus()
+  })
+  async function finishNewChannel (save) {
+    const row = $('newChannelRow')
+    if (row.classList.contains('hidden')) return
+    row.classList.add('hidden')
+    const name = $('newChannelInput').value.trim()
+    if (!save || !name) return
+    const m = await chat.createChannel(name)
+    if (m) { addMsg(m); switchChannel(m.target) }
+  }
+  $('newChannelInput').addEventListener('keydown', e => {
+    if (e.key === 'Enter') { e.preventDefault(); finishNewChannel(true) }
+    if (e.key === 'Escape') { e.preventDefault(); finishNewChannel(false) }
+  })
+  $('newChannelInput').addEventListener('blur', () => finishNewChannel(true))
 
   // ---- Thread panel
   function showThread (id) {
@@ -657,7 +808,6 @@
       box.append(msgEl(r, { thread: true, grouped }))
       prev = r
     }
-    $('threadRoom').textContent = $('roomLabel').textContent
     $('threadInput').placeholder = 'Reply…'
     box.scrollTop = keep === null ? box.scrollHeight : keep
   }
@@ -704,38 +854,48 @@
   function showError (text) { $('joinError').textContent = text || '' }
 
   function showRoom (info) {
-    $('roomLabel').textContent = '# ' + info.room
+    $('roomName').textContent = info.room
     $('inviteCode').textContent = info.invite
-    $('input').placeholder = 'Message #' + info.room
     store('invite', info.invite) // same secret, newest name
     rememberRoom(info.invite, info.room)
   }
   chat.on('room', showRoom)
 
-  function startRename () {
-    const input = $('renameInput')
-    input.value = $('roomLabel').textContent.replace(/^# /, '')
-    $('roomLabel').classList.add('hidden')
-    input.classList.remove('hidden')
-    input.focus(); input.select()
-  }
-  async function finishRename (save) {
-    const input = $('renameInput')
-    if (input.classList.contains('hidden')) return
-    input.classList.add('hidden')
-    $('roomLabel').classList.remove('hidden')
-    const name = input.value.trim()
-    if (save && name) {
-      const info = await chat.renameRoom(name)
-      if (info) showRoom(info)
+  // Click-to-edit for a label: shows the input, saves on Enter/blur, cancels on Escape.
+  function inlineEdit (label, input, getValue, save) {
+    let open = false
+    const finish = ok => {
+      if (!open) return
+      open = false
+      input.classList.add('hidden')
+      label.classList.remove('hidden')
+      const v = input.value.trim()
+      if (ok && v && v !== getValue()) save(v)
     }
+    input.addEventListener('keydown', e => {
+      if (e.key === 'Enter') { e.preventDefault(); finish(true) }
+      if (e.key === 'Escape') { e.preventDefault(); finish(false) }
+    })
+    input.addEventListener('blur', () => finish(true))
+    const start = () => {
+      open = true
+      input.value = getValue()
+      label.classList.add('hidden')
+      input.classList.remove('hidden')
+      input.focus(); input.select()
+    }
+    label.addEventListener('click', start)
+    return start
   }
-  $('roomLabel').addEventListener('click', startRename)
-  $('renameInput').addEventListener('keydown', e => {
-    if (e.key === 'Enter') { e.preventDefault(); finishRename(true) }
-    if (e.key === 'Escape') { e.preventDefault(); finishRename(false) }
+  // Channel name (header) and room name (sidebar top).
+  const startRename = inlineEdit($('roomLabel'), $('renameInput'), () => channels.get(currentCh).name, async v => {
+    const m = await chat.setChannel(currentCh, v, false)
+    if (m) addMsg(m)
   })
-  $('renameInput').addEventListener('blur', () => finishRename(true))
+  inlineEdit($('roomName'), $('roomRenameInput'), () => $('roomName').textContent, async v => {
+    const info = await chat.renameRoom(v)
+    if (info) showRoom(info)
+  })
 
   $('inviteBtn').addEventListener('click', () => $('inviteBar').classList.toggle('hidden'))
   $('closeInvite').addEventListener('click', () => $('inviteBar').classList.add('hidden'))
@@ -747,6 +907,7 @@
 
   // ---- Entering rooms / join screen
   async function enterRoom (name, invite, showInvite) {
+    if (keyOf(invite) !== current) { currentCh = GENERAL; unread.clear(); closeThread() }
     const res = await chat.join(name, invite)
     if (!res.ok) { showError(res.error); return false }
     showError('')
@@ -854,7 +1015,8 @@
       box.value = ''
       autosize()
       const parent = parentId()
-      const m = await chat.send(text, parent ? { parent } : undefined)
+      const ch = parent ? chOf(byId.get(parent) || {}) : currentCh
+      const m = await chat.send(text, parent ? { parent, ch } : { ch })
       if (m) { addMsg(m, true); touchSession() }
     }
     box.addEventListener('input', autosize)

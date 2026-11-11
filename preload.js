@@ -9,6 +9,8 @@ contextBridge.exposeInMainWorld('chat', {
   leave: () => ipcRenderer.invoke('leave'),
   send: (text, extra) => ipcRenderer.invoke('send', text, extra),
   react: (target, emoji, on) => ipcRenderer.invoke('react', target, emoji, on),
+  setChannel: (target, name, deleted) => ipcRenderer.invoke('channel:set', target, name, deleted),
+  createChannel: name => ipcRenderer.invoke('channel:create', name),
   version: () => ipcRenderer.invoke('app:version'),
   installUpdate: () => ipcRenderer.invoke('update:install'),
   getSettings: () => ipcRenderer.invoke('settings:get'),

@@ -47,7 +47,13 @@ README.md has install/build details; this file is "where things stand".
   person+emoji wins; its `text` ("reacted 👍") is the fallback old clients display. UI keeps byId/reacts/replies
   maps; replies only show in the thread panel (#thread; full-screen on phones). Android doesn't notify reactions.
   Verified with two isolated desktop instances (sync both ways, toggle off, saved to disk) + phone-size layout.
-- Ideas next: unread badges for other rooms (needs multi-room core), more emojis, edit/delete messages.
+- Channels (2026-11-11): a ROOM is the workspace (one invite = all its channels); left rail = room icons.
+  Channel state = history entries kind:'chan' {target: channel id, chName, deleted}, newest per channel wins;
+  messages carry `ch` (missing = 'general', so pre-channel history is #general; #general can't be deleted).
+  Anyone in the room can add/rename/delete channels. Unread marks per channel (in memory). Messages of deleted
+  channels stay in history but are hidden. Verified with two isolated instances (create/rename/delete/unread sync).
+- Ideas next: unread badges for other ROOMS (needs multi-room core), more emojis, edit/delete messages,
+  remember last channel per room.
 
 ## Gotchas
 - TEST WITH `YAPAPP_DATA=<dir>` (main.js) - otherwise the dev app uses the user's REAL settings/history

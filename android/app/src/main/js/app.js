@@ -40,6 +40,8 @@ const methods = {
   },
   send: (text, extra) => core.send(text, extra),
   react: (target, emoji, on) => core.react(target, emoji, on),
+  setChannel: (target, name, deleted) => core.setChannel(target, name, deleted),
+  createChannel: name => core.createChannel(name),
   renameRoom: name => core.renameRoom(name),
   createInvite: name => core.createInvite(name),
   checkInvite: code => core.checkInvite(code),

@@ -33,6 +33,8 @@
     leave: () => call('leave'),
     send: (text, extra) => call('send', text, extra),
     react: (target, emoji, on) => call('react', target, emoji, on),
+    setChannel: (target, name, deleted) => call('setChannel', target, name, deleted),
+    createChannel: name => call('createChannel', name),
     renameRoom: name => call('renameRoom', name),
     createInvite: name => call('createInvite', name),
     checkInvite: code => call('checkInvite', code),
