@@ -1,7 +1,22 @@
-# YapApp - handover notes (as of 2026-11-10)
+# YapApp - handover notes (as of 2026-11-11 evening)
 
-Serverless P2P group chat. Desktop (Electron, Windows/Linux) + Android (Bare Kit). Same rooms on all.
+Serverless P2P group chat, Slack-like. Desktop (Electron, Windows/Linux) + Android (Bare Kit). Same rooms on all.
 README.md has install/build details; this file is "where things stand".
+
+## Where things stand (read this first)
+- Live rolling build 0.3.25 (win/linux/apk at releases/tag/latest); all features below pushed and CI green.
+- Features: rooms (= workspaces, invite-only) with channels, threads, reactions, encrypted DMs, files/photos/
+  folders, emoji panel (+ Favorites tab from the user's Slack, custom :sadshit:), profile + room pictures,
+  profiles with details, edit/delete messages, unread marks, self-update on all platforms.
+- CLEAN SLATE 2026-11-11: user asked to delete all test rooms/data. Deleted: PC %APPDATA%/YapApp (dev-run data;
+  YapApp is NOT installed on this PC) and all scratch test profiles. Phone: `pm clear` is blocked by MIUI and the
+  release build isn't run-as-able -> user was told to clear YapApp's data on the phone themselves
+  (Settings > Apps > YapApp > Clear data). Next time: create real rooms from scratch.
+- Testing recipe: two/three isolated desktop instances with YAPAPP_DATA=<scratch dir> + --remote-debugging-port
+  and a small CDP script (Runtime.evaluate). Instances on the same PC sometimes take 30 s-3 min to find each
+  other (DHT); not a bug. Test windows are visible on the user's screen.
+- Not verified by a human tap yet: Android file picker (📎) and picking a picture on the phone.
+- Linux builds are produced by CI but were never run on a real Linux machine.
 
 ## Layout
 - `core.js` - ALL chat logic, shared by desktop and Android: invites, HKDF/HMAC-SHA256 auth (sodium), history
@@ -11,8 +26,8 @@ README.md has install/build details; this file is "where things stand".
   `Updater` self-update), `app/src/main/js/app.js` worklet bridge, `scripts/` (sync, fetch-barekit).
 - `.github/workflows/release.yml` - every push to main: Windows + Linux + Android builds -> rolling `latest` release.
 
-## State
-- Version 0.3.2 (CI makes rolling builds `0.3.<run number>`).
+## History of verification
+- Base version 0.3.2 in package.json (CI makes rolling builds `0.3.<run number>`).
 - Verified: desktop self-update (local feed), Android on Redmi Note 9 / Android 12: chat with PC, background
   service + notifications, self-update 0.3.2 -> 0.3.99 (local feed), invite auth (good/wrong/no-auth bots).
 - Repo is PUBLIC (2026-11-11); Actions runs 1-10 all green, rolling `latest` has win/linux 0.3.10 -> desktop
@@ -23,7 +38,6 @@ README.md has install/build details; this file is "where things stand".
 ## Open / to do (renumber freely)
 1. DONE 2026-11-11: secret `ANDROID_KEYSTORE_B64` added; run #12 published YapApp.apk 0.3.12 + android-latest.json
    (same cert 36b60d12... as local builds). NOTE: pushes touching only *.md (or empty commits) don't trigger CI.
-3. User's PC was still running an old 0.2.0 YapApp (no gossip) - install a new build.
 4. MIUI: Autostart must be ON or the boot receiver is blocked ("not permitted to auto start" in logcat).
    MIUI RESETS Autostart to off on every app update/reinstall -> so MY_PACKAGE_REPLACED rejoin never fires on
    MIUI, and the user must re-enable Autostart after each update (or `adb shell appops set
