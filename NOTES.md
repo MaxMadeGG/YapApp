@@ -21,7 +21,8 @@ README.md has install/build details; this file is "where things stand".
   getSettings, join if login fresh) verified on the Redmi after a real reboot (2026-11-11).
 
 ## Open / to do (renumber freely)
-1. User must add repo secret `ANDROID_KEYSTORE_B64` (base64 of `~/.android/debug.keystore`), else CI skips the APK.
+1. DONE 2026-11-11: secret `ANDROID_KEYSTORE_B64` added; run #12 published YapApp.apk 0.3.12 + android-latest.json
+   (same cert 36b60d12... as local builds). NOTE: pushes touching only *.md (or empty commits) don't trigger CI.
 3. User's PC was still running an old 0.2.0 YapApp (no gossip) - install a new build.
 4. MIUI: Autostart must be ON or the boot receiver is blocked ("not permitted to auto start" in logcat).
    MIUI RESETS Autostart to off on every app update/reinstall -> so MY_PACKAGE_REPLACED rejoin never fires on
