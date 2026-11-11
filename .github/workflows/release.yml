@@ -1,6 +1,6 @@
 name: Build installers
 
-# Every push to main: rebuild the Windows + Linux installers and replace the
+# Every push to main: rebuild the Windows + Linux installers + Android APK and replace the
 # files on the rolling "latest" release (fixed file names, so links never change).
 # Installed apps self-update from that release (electron-updater, generic feed).
 # Pushing a version tag like v0.2.0 also makes a permanent versioned release.
