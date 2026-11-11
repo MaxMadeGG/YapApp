@@ -245,6 +245,25 @@
   .clickable { cursor: pointer; }
   .msg .name.clickable:hover { text-decoration: underline; }
 
+  /* Mentions */
+  .mention { background: #243a6b; color: #b9cdff; border-radius: 4px; padding: 0 3px; font-weight: 600; }
+  .mention.me { background: #5a4712; color: #ffd56a; }
+  .mention.clickable:hover, .chanLink:hover { text-decoration: underline; }
+  .chanLink { color: #8fb0ff; font-weight: 600; }
+  .msg.mentioned { background: rgba(255, 196, 0, .07); box-shadow: inset 3px 0 0 #e6b422; }
+  .msg.mentioned:hover { background: rgba(255, 196, 0, .11); }
+  .item .badge { background: #e5484d; color: #fff; font-size: 11px; font-weight: 800; border-radius: 999px;
+    min-width: 18px; height: 18px; display: inline-flex; align-items: center; justify-content: center; padding: 0 5px; }
+  #mentionPop { position: fixed; z-index: 36; background: var(--panel); border: 1px solid var(--line); border-radius: 10px;
+    padding: 4px; box-shadow: 0 6px 24px rgba(0,0,0,.45); max-height: 300px; overflow-y: auto; }
+  #mentionPop.hidden { display: none; }
+  #mentionPop .mrow { display: flex; align-items: center; gap: 8px; padding: 6px 8px; border-radius: 6px; cursor: pointer; }
+  #mentionPop .mrow.sel, #mentionPop .mrow:hover { background: var(--active); }
+  #mentionPop .mname { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  #mentionPop .hint { color: var(--muted); font-size: 12px; margin-left: auto; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  #mentionPop .mrow.sel .hint { color: #cfd8ff; }
+  #mentionPop .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--online); flex: none; }
+
   /* Edit / delete */
   .text .edited { color: var(--muted); font-size: 12px; }
   .text.gone { color: var(--muted); font-style: italic; }
@@ -639,17 +658,6 @@
     img.className = 'cemoji'; img.src = CUSTOM_EMOJI[e.slice(1, -1)]; img.alt = e; img.title = e
     return img
   }
-  // Message text with :custom: emojis turned into pictures (big when that's all there is).
-  function richText (el, text) {
-    let last = 0
-    for (const m of text.matchAll(CUSTOM_RE)) {
-      if (!isCustom(m[0])) continue
-      el.append(text.slice(last, m.index), emojiNode(m[0]))
-      last = m.index + m[0].length
-    }
-    el.append(text.slice(last))
-    if (last && !text.replace(CUSTOM_RE, '').trim()) el.classList.add('jumbo')
-  }
   const EMOJIS = ['👍', '❤️', '😂', '🎉', '😮', '😢', '🔥', '👀', '✅', '🙏', ':sadshit:']
   const byId = new Map()     // id -> message (normal + replies)
   const reacts = new Map()   // target id -> Map(emoji -> Map(name -> { on, ts }))
@@ -670,6 +678,7 @@
   const chOf = m => m.kind === 'dm' ? 'dm:' + m.peer : (m.ch || GENERAL)
   const isDm = id => id.startsWith('dm:')
   const people = new Set()   // names that can receive direct messages (published a key)
+  const authors = new Set()  // everyone who has written here (for @mentions)
   let online = []            // names of connected peers
   function resetChannels () { channels.clear(); channels.set(GENERAL, { name: 'general', ts: 0, deleted: false }) }
   resetChannels()
@@ -716,6 +725,7 @@
     }
     if (byId.has(m.id)) return false
     byId.set(m.id, m)
+    if (m.name) authors.add(m.name)
     if (m.parent) {
       if (!replies.has(m.parent)) replies.set(m.parent, [])
       const list = replies.get(m.parent)
@@ -841,6 +851,7 @@
     }
     const text = document.createElement('div'); text.className = 'text'
     const gone = isDeleted(m)
+    if (!gone && mentionsMe(m)) div.classList.add('mentioned')
     if (gone) { text.classList.add('gone'); text.textContent = 'This message was deleted.' }
     else {
       richText(text, textOf(m))
@@ -978,11 +989,13 @@
       return
     }
     if (m.kind === 'react') { refresh(m.target); return }
+    notifyIfNeeded(m)
     if (m.parent) {
       refresh(m.parent)
       if (openThread === m.parent) renderThread(forceScroll)
       return
     }
+    if (chOf(m) !== currentCh && mentionsMe(m)) mentionUnread.add(chOf(m))
     if (chOf(m) !== currentCh) {
       if (m.name !== myName) { unread.add(chOf(m)); renderChannels(); renderPeople() }
       return
@@ -1002,7 +1015,7 @@
   function renderHistory (list) {
     entries = list.slice()
     byId.clear(); reacts.clear(); replies.clear(); resetChannels(); people.clear(); profiles.clear()
-    edits.clear(); dels.clear()
+    edits.clear(); dels.clear(); authors.clear()
     roomPic = { pic: null, ts: 0 }
     for (const m of list) ingest(m)
     if (!isDm(currentCh)) {
@@ -1074,6 +1087,7 @@
   function switchChannel (id) {
     currentCh = id
     unread.delete(id)
+    mentionUnread.delete(id)
     closeThread()
     closeDrawer()
     renderChannels()
@@ -1093,6 +1107,7 @@
       const h = document.createElement('span'); h.className = 'hash'; h.textContent = '#'
       const l = document.createElement('span'); l.className = 'label'; l.textContent = c.name
       const tools = document.createElement('span'); tools.className = 'tools'
+      if (mentionUnread.has(id)) div.dataset.mention = '1'
       const ren = iconBtn('iconBtn', 'Rename channel', '#i-edit')
       ren.addEventListener('click', e => { e.stopPropagation(); if (id !== currentCh) switchChannel(id); startRename() })
       tools.append(ren)
@@ -1101,7 +1116,9 @@
         del.addEventListener('click', e => { e.stopPropagation(); confirmDelete(div, id, c.name) })
         tools.append(del)
       }
-      div.append(h, l, tools)
+      div.append(h, l)
+      if (div.dataset.mention) { const b = document.createElement('span'); b.className = 'badge'; b.textContent = '@'; div.append(b) }
+      div.append(tools)
       div.addEventListener('click', () => { if (!div.classList.contains('confirm')) switchChannel(id) })
       box.append(div)
     }
@@ -1982,6 +1999,174 @@
     const b = $('roomPicBtn')
     b.innerHTML = ''
     b.append(picAvatar($('roomName').textContent || '#', roomPic.pic, 'room'))
+  }
+
+  // ---- Mentions: @name / @everyone / @channel / @here, and #channel links, with autocomplete.
+  const BROADCASTS = [['everyone', 'Notify everyone in this room'], ['channel', 'Notify everyone in this channel'],
+    ['here', 'Notify everyone who is online']]
+  const mentionUnread = new Set() // channel ids with a mention of you you haven't seen
+  const reEsc = s => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+  const END = '(?=$|[\\s.,!?;:)\\]\'"])'
+  function knownNames () {
+    return [...new Set([...people, ...online, ...authors, ...profiles.keys(), myName].filter(Boolean))]
+  }
+  let tokenRe = null, tokenKey = ''
+  function tokenRegex () { // custom emoji | @mention | #channel (longest names first, so "Max Smith" beats "Max")
+    const names = knownNames().sort((a, b) => b.length - a.length)
+    const chans = [...channels.values()].filter(c => !c.deleted).map(c => c.name).sort((a, b) => b.length - a.length)
+    const key = names.join('\n') + '\t' + chans.join('\n')
+    if (key !== tokenKey) {
+      tokenKey = key
+      const who = ['everyone', 'channel', 'here', ...names].map(reEsc).join('|')
+      const ch = chans.length ? chans.map(reEsc).join('|') : '(?!)'
+      tokenRe = new RegExp(`(:[a-z0-9_+-]{1,32}:)|(^|[^\\w@])@(${who})${END}|(^|[^\\w#&])#(${ch})${END}`, 'gi')
+    }
+    tokenRe.lastIndex = 0
+    return tokenRe
+  }
+  function mentionsMe (m) {
+    if (!myName || m.name === myName || !m.text) return false
+    const t = m.text
+    return /(^|[^\w@])@(everyone|channel|here)(?=$|[^\w])/i.test(t) ||
+      new RegExp(`(^|[^\\w@])@${reEsc(myName)}${END}`, 'i').test(t)
+  }
+
+  // Message text: custom emojis -> pictures, @mentions -> tags, #channels -> links.
+  function richText (el, text) {
+    let last = 0, onlyEmoji = true, any = false
+    for (const m of text.matchAll(tokenRegex())) {
+      let node, start = m.index
+      if (m[1]) {
+        if (!isCustom(m[1])) continue
+        node = emojiNode(m[1])
+      } else if (m[3]) {
+        start += m[2].length
+        const who = m[3]
+        const lower = who.toLowerCase()
+        const real = BROADCASTS.some(b => b[0] === lower) ? lower : knownNames().find(n => n.toLowerCase() === lower) || who
+        node = document.createElement('span')
+        node.className = 'mention' + (real === myName || BROADCASTS.some(b => b[0] === real) ? ' me' : '')
+        node.textContent = '@' + real
+        if (!BROADCASTS.some(b => b[0] === real)) {
+          node.classList.add('clickable')
+          node.addEventListener('click', e => { e.stopPropagation(); openProfile(real) })
+        }
+        onlyEmoji = false
+      } else if (m[5]) {
+        start += m[4].length
+        const name = m[5].toLowerCase()
+        const id = [...channels].find(([, c]) => !c.deleted && c.name === name)?.[0]
+        node = document.createElement('span')
+        node.className = 'chanLink clickable'
+        node.textContent = '#' + name
+        if (id) node.addEventListener('click', e => { e.stopPropagation(); switchChannel(id) })
+        onlyEmoji = false
+      } else continue
+      el.append(text.slice(last, start), node)
+      last = m.index + m[0].length
+      any = true
+    }
+    el.append(text.slice(last))
+    if (any && onlyEmoji && !text.replace(CUSTOM_RE, '').trim()) el.classList.add('jumbo')
+  }
+
+  // Autocomplete popup for the message boxes.
+  const mentionPop = document.createElement('div')
+  mentionPop.id = 'mentionPop'
+  mentionPop.className = 'hidden'
+  document.body.append(mentionPop)
+  let pop = null // { box, start, end, items, sel }
+
+  function closeMentions () { mentionPop.classList.add('hidden'); pop = null }
+  function updateMentions (box) {
+    const upto = box.value.slice(0, box.selectionStart)
+    const m = /(^|[\s(])([@#])([^\s@#]{0,40})$/.exec(upto)
+    if (!m) { closeMentions(); return }
+    const q = m[3].toLowerCase()
+    let items
+    if (m[2] === '@') {
+      const names = knownNames().filter(n => n !== myName)
+        .filter(n => n.toLowerCase().startsWith(q) || n.toLowerCase().includes(' ' + q))
+        .sort((a, b) => (online.includes(b) - online.includes(a)) || a.localeCompare(b))
+      items = [...names.map(n => ({ insert: '@' + n, label: n, person: n })),
+        ...BROADCASTS.filter(([b]) => b.startsWith(q)).map(([b, hint]) => ({ insert: '@' + b, label: '@' + b, hint }))]
+    } else {
+      items = [...channels].filter(([, c]) => !c.deleted && c.name.includes(q))
+        .map(([id, c]) => ({ insert: '#' + c.name, label: '#' + c.name }))
+    }
+    items = items.slice(0, 8)
+    if (!items.length) { closeMentions(); return }
+    pop = { box, start: upto.length - m[3].length - 1, end: box.selectionStart, items, sel: 0 }
+    renderMentions()
+  }
+  function renderMentions () {
+    mentionPop.innerHTML = ''
+    pop.items.forEach((it, i) => {
+      const row = document.createElement('div')
+      row.className = 'mrow' + (i === pop.sel ? ' sel' : '')
+      if (it.person) {
+        const a = avatar(it.person, 'sm')
+        row.append(a)
+        const n = document.createElement('span'); n.className = 'mname'; n.textContent = it.person
+        row.append(n)
+        if (online.includes(it.person)) { const d = document.createElement('span'); d.className = 'dot'; row.append(d) }
+      } else {
+        const n = document.createElement('span'); n.className = 'mname'; n.textContent = it.label
+        row.append(n)
+      }
+      if (it.hint) { const h = document.createElement('span'); h.className = 'hint'; h.textContent = it.hint; row.append(h) }
+      row.addEventListener('pointerdown', e => { e.preventDefault(); pickMention(i) })
+      mentionPop.append(row)
+    })
+    mentionPop.classList.remove('hidden')
+    const r = pop.box.getBoundingClientRect()
+    mentionPop.style.left = Math.max(8, r.left) + 'px'
+    mentionPop.style.width = Math.min(r.width, 360) + 'px'
+    mentionPop.style.top = Math.max(8, r.top - mentionPop.offsetHeight - 6) + 'px'
+  }
+  function pickMention (i) {
+    const { box, start, end, items } = pop
+    const ins = items[i].insert + ' '
+    box.value = box.value.slice(0, start) + ins + box.value.slice(end)
+    box.selectionStart = box.selectionEnd = start + ins.length
+    closeMentions()
+    box.focus()
+    box.dispatchEvent(new Event('input'))
+  }
+  for (const box of [$('input'), $('threadInput')]) {
+    box.addEventListener('input', () => updateMentions(box))
+    box.addEventListener('click', () => updateMentions(box))
+    box.addEventListener('blur', () => setTimeout(closeMentions, 150))
+    // Capture phase: runs before the composer's Enter-to-send.
+    box.addEventListener('keydown', e => {
+      if (!pop || pop.box !== box) return
+      if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+        pop.sel = (pop.sel + (e.key === 'ArrowDown' ? 1 : -1) + pop.items.length) % pop.items.length
+        renderMentions()
+      } else if (e.key === 'Enter' || e.key === 'Tab') {
+        pickMention(pop.sel)
+      } else if (e.key === 'Escape') {
+        closeMentions()
+      } else return
+      e.preventDefault()
+      e.stopImmediatePropagation()
+    }, true)
+  }
+
+  // Desktop pop-up notifications for mentions and DMs while you're looking elsewhere.
+  function notifyIfNeeded (m) {
+    if (IS_PHONE || m.name === myName || typeof Notification === 'undefined') return
+    const dm = m.kind === 'dm'
+    const mention = mentionsMe(m)
+    if (!dm && !mention) return
+    if (document.hasFocus() && chOf(m) === currentCh) return
+    if (Notification.permission === 'default') Notification.requestPermission()
+    if (Notification.permission !== 'granted') return
+    const where = dm ? 'Direct message' : '#' + (channels.get(chOf(m)) || { name: 'general' }).name
+    const n = new Notification(m.name + (dm ? '' : ' mentioned you') + ' · ' + where, {
+      body: (m.text || (m.files ? '📎 sent a file' : '')).slice(0, 200), silent: false
+    })
+    n.onclick = () => { if (chat.focus) chat.focus(); switchChannel(chOf(m)) }
   }
 
   // ---- Composers (main + thread). Phones: Enter is a new line, the Send button sends.

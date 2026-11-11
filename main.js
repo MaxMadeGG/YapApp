@@ -9,6 +9,7 @@ const { createCore } = require('./core.js')
 if (process.env.YAPAPP_DATA) app.setPath('userData', process.env.YAPAPP_DATA)
 
 let win = null
+if (process.platform === 'win32') app.setAppUserModelId('com.maxmadegg.yapapp') // Windows notifications
 
 function toUI (channel, data) {
   if (win && !win.isDestroyed()) win.webContents.send(channel, data)
@@ -74,6 +75,7 @@ ipcMain.handle('invite:create', (e, roomName) => getCore().createInvite(roomName
 ipcMain.handle('invite:check', (e, code) => getCore().checkInvite(code))
 ipcMain.handle('clipboard:write', (e, text) => clipboard.writeText(String(text)))
 ipcMain.handle('app:version', () => app.getVersion())
+ipcMain.handle('win:focus', () => { if (!win) return; if (win.isMinimized()) win.restore(); win.show(); win.focus() })
 
 // Self-update from the rolling "latest" GitHub release (feed URL is in
 // package.json build.publish). Only the installed app updates, not `npm start`.

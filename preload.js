@@ -20,6 +20,7 @@ contextBridge.exposeInMainWorld('chat', {
   createChannel: name => ipcRenderer.invoke('channel:create', name),
   version: () => ipcRenderer.invoke('app:version'),
   installUpdate: () => ipcRenderer.invoke('update:install'),
+  focus: () => ipcRenderer.invoke('win:focus'),
   getSettings: () => ipcRenderer.invoke('settings:get'),
   setSettings: changes => ipcRenderer.invoke('settings:set', changes),
   on: (channel, fn) => {

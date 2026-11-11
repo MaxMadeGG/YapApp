@@ -297,6 +297,10 @@ public class YapService extends Service {
     String body = m.optString("text", "");
     JSONArray files = m.optJSONArray("files");
     if (body.isEmpty() && files != null) body = files.length() == 1 ? "📎 " + files.optJSONObject(0).optString("n", "a file") : "📎 " + files.length() + " files";
+    String said = m.optString("text", "");
+    boolean mentioned = said.matches("(?is).*(^|[^\\w@])@(everyone|channel|here)\\b.*") ||
+      (myName != null && said.toLowerCase().contains("@" + myName.toLowerCase()));
+    if (mentioned) body = "(mentioned you) " + body;
     if (kind.equals("dm")) body = "(direct message) " + body;
     unread.add(new Notification.MessagingStyle.Message(body, m.optLong("ts", System.currentTimeMillis()), sender));
     while (unread.size() > 25) unread.remove(0);

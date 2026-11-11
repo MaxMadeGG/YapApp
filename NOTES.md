@@ -99,6 +99,11 @@ README.md has install/build details; this file is "where things stand".
   room syncMyProfile() publishes it if the room has an older one, or adopts a newer one from your other device.
   FIXED: profile was re-published on every start (history arrived before myName was set). Click a picture/name
   -> profile card; your own card -> Edit profile dialog.
+- Mentions (2026-11-11): plain text "@Name" / "@everyone|@channel|@here" / "#channel" - no protocol change.
+  richText() tokenizes custom emoji | @known-name (longest first, names may contain spaces) | #channel; mention
+  of you = yellow tag + highlighted row + red "@" badge on the channel; @-popup autocomplete in both composers
+  (capture-phase keydown beats Enter-to-send). Desktop: HTML5 Notification for mentions/DMs when not focused
+  (app.setAppUserModelId for Windows toasts; 'win:focus' IPC on click). Android: "(mentioned you) " prefix.
 - Ideas next: unread badges for other ROOMS (needs multi-room core), more emojis, edit/delete messages,
   remember last channel per room.
 
